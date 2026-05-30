@@ -651,8 +651,8 @@ export default function SuperAdminDashboard() {
            <LogOut className="w-4 h-4" /> Logout
         </button>
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer border border-slate-100">
-          <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-             <img src="https://i.pravatar.cc/150?img=11" alt="Admin" className="w-full h-full object-cover" />
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#109e38] to-emerald-400 flex items-center justify-center text-white font-bold text-sm shadow-sm shrink-0">
+             SA
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold text-slate-900 truncate">System Admin</div>
