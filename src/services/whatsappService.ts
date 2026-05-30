@@ -306,9 +306,12 @@ export async function connectWhatsApp(tenantId: string) {
 
         customerQueues[customerPhone] = currentQueue.then(async () => {
           try {
-            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-            if (text) {
-              logger.debug({ tenantId, message: text.substring(0, 50) }, "[WhatsApp] Message received");
+            const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+            const locationMsg = msg.message?.locationMessage;
+
+            if (text || locationMsg) {
+              const textToLog = text || "📍 Ubicación Geográfica";
+              logger.debug({ tenantId, message: textToLog.substring(0, 50) }, "[WhatsApp] Message received");
               
               if (tenantId === 'system_admin') {
                 const jid = msg.key.remoteJid!;
@@ -318,17 +321,17 @@ export async function connectWhatsApp(tenantId: string) {
                 const sessionMap = (global as any).systemAdminSessions;
                 const session = sessionMap.get(jid) || { state: 'none', loggedIn: false };
                 
-                if (text.trim().toLowerCase() === '/login') {
+                if (text && text.trim().toLowerCase() === '/login') {
                   session.state = 'awaiting_email';
                   session.loggedIn = false;
                   sessionMap.set(jid, session);
                   await sock.sendMessage(jid, { text: "Por favor, ingresa tu correo electrónico de administrador:" });
-                } else if (session.state === 'awaiting_email') {
+                } else if (session.state === 'awaiting_email' && text) {
                   session.email = text.trim();
                   session.state = 'awaiting_password';
                   sessionMap.set(jid, session);
                   await sock.sendMessage(jid, { text: "Por favor, ingresa tu contraseña:" });
-                } else if (session.state === 'awaiting_password') {
+                } else if (session.state === 'awaiting_password' && text) {
                   if (session.email === 'admin@whatxpress.com' && text.trim() === (process.env.WA_ADMIN_PASSWORD || 'admin123')) {
                     session.loggedIn = true;
                     session.state = 'none';
@@ -339,16 +342,16 @@ export async function connectWhatsApp(tenantId: string) {
                     sessionMap.set(jid, session);
                     await sock.sendMessage(jid, { text: "❌ Credenciales incorrectas. Inicio de sesión cancelado." });
                   }
-                } else if (text.trim().toLowerCase() === '/logout' && session.loggedIn) {
+                } else if (text && text.trim().toLowerCase() === '/logout' && session.loggedIn) {
                   session.loggedIn = false;
                   sessionMap.set(jid, session);
                   await sock.sendMessage(jid, { text: "Has cerrado sesión correctamente. Volviendo al modo de ventas." });
                 } else {
-                  if (session.loggedIn) {
+                  if (session.loggedIn && text) {
                     const { processSystemAdminChat } = await import('./aiService.js');
                     const response = await processSystemAdminChat(text);
                     await sock.sendMessage(msg.key.remoteJid!, { text: response });
-                  } else {
+                  } else if (text) {
                     const { generateAIContent } = await import('./aiService.js');
                     const salesInstruction = `You are a sales and informational agent for WhatXpress, a SaaS platform that allows restaurants to manage orders, menus, and AI-powered WhatsApp ordering.
 Be friendly, persuasive, and helpful. You explain features like multi-channel order receiving, automated WhatsApp agents for restaurants, and payment gateways.
@@ -360,206 +363,60 @@ IMPORTANT: You MUST respond in the EXACT same language that the customer speaks 
                 }
               } else {
                 const db = await initDb();
-                const config = await db.get('SELECT * FROM ai_config WHERE tenant_id = ?', [tenantId]);
-                const menuItems = await db.all('SELECT * FROM menu_items WHERE tenant_id = ?', [tenantId]);
                 
-                let menuText = menuItems.map((item: any) => `- "${item.name}" ($${item.price})`).join('\n');
-                
-                const systemInstruction = `You are an autonomous AI restaurant agent/seller for a restaurant. 
-Behave like a natural human seller, not a strict robot. Engage the customer, be friendly, persuasive, and helpful.
-IMPORTANT: You MUST respond in the EXACT same language that the customer speaks to you. If they speak Spanish, reply in Spanish. If English, reply in English.
-
-Here is the restaurant menu:
-${menuText}
-
-Custom instructions from the restaurant owner:
-${config ? config.custom_instructions : ''}
-
-You MUST respond strictly in the following JSON format:
-{
-  "reply": "Friendly conversational message to send to the customer on WhatsApp",
-  "order_detected": true,
-  "items": [{"name": "item name matching the menu exactly", "quantity": number}]
-}
-If no order is confirmed yet, set order_detected to false and items to empty list. Respond with valid JSON only.`;
-
-                // 1. Save incoming user message to history
-                await db.run(
-                  "INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'user', ?)",
-                  [tenantId, customerPhone, text]
-                );
-
-                // 2. Load previous history from db
-                const historyRows = await db.all(
-                  "SELECT role, message FROM whatsapp_chat_history WHERE tenant_id = ? AND customer_phone = ? ORDER BY created_at DESC LIMIT 10",
-                  [tenantId, customerPhone]
-                );
-                const history = historyRows.reverse().map((row: any) => ({
-                  role: row.role === 'user' ? 'user' : 'model',
-                  parts: [{ text: row.message }]
-                }));
-
-                // 2.b Check if bot is paused by human operator
-                const chatControl = await db.get(
-                  "SELECT is_bot_active FROM whatsapp_chat_control WHERE tenant_id = ? AND customer_phone = ?",
-                  [tenantId, customerPhone]
-                );
-                const isBotActive = chatControl ? chatControl.is_bot_active !== 0 : true;
-                
-                if (!isBotActive) {
-                  logger.info({ tenantId, customerPhone }, "[WhatsApp] Chat intercepted by HUMAN, skipping AI.");
-                  return; 
+                // Unify text and location into textToProcess
+                let textToProcess = text;
+                if (locationMsg) {
+                  textToProcess = `Mi ubicación geográfica es latitud: ${locationMsg.degreesLatitude}, longitud: ${locationMsg.degreesLongitude}`;
                 }
 
-                // 3. Call Gemini in JSON mode
-                const aiResult = await generateAIContent(text, systemInstruction, undefined, history, true);
-                
-                let parsedResult;
-                try {
-                  const jsonMatch = aiResult.text.match(/\{[\s\S]*\}/);
-                  parsedResult = JSON.parse(jsonMatch ? jsonMatch[0] : aiResult.text);
-                } catch (e) {
-                  logger.error({ text: aiResult.text.substring(0, 100) }, "[WhatsApp] Failed to parse Gemini JSON response");
-                  parsedResult = { reply: aiResult.text, order_detected: false, items: [] };
-                }
-
-                // 4. Save model's conversational reply to history
-                await db.run(
-                  "INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'model', ?)",
-                  [tenantId, customerPhone, parsedResult.reply]
-                );
-
-                // 5. Send reply message on WhatsApp
-                await sock.sendMessage(customerPhone, { text: parsedResult.reply });
-
-                // 5b. Send product images for mentioned items
-                if (!parsedResult.order_detected) {
-                  const mentionedItems = menuItems.filter((item: any) => 
-                    parsedResult.reply.toLowerCase().includes(item.name.toLowerCase())
+                if (textToProcess) {
+                  // 1. Save incoming user message to history
+                  await db.run(
+                    "INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'user', ?)",
+                    [tenantId, customerPhone, textToProcess]
                   );
-                  // Send up to 3 images to avoid spam
-                  for (const item of mentionedItems.slice(0, 3)) {
-                    const primaryImage = item.image_url ? item.image_url.split(',')[0] : '';
-                    if (primaryImage && (primaryImage.startsWith('http') || primaryImage.startsWith('/uploads'))) {
-                      try {
-                        // Resolve absolute URL if relative
-                        const imageUrl = primaryImage.startsWith('http') ? primaryImage : `https://app.whatxpress.com${primaryImage}`;
-                        await sock.sendMessage(customerPhone, {
-                          image: { url: imageUrl },
-                          caption: `${item.name} — $${item.price}`
-                        });
-                      } catch (imgErr) {
-                        logger.warn({ item: item.name }, "[WhatsApp] Could not send product image");
-                      }
-                    }
-                  }
-                }
 
-                // 6. Handle automatic order registration if order detected
-                if (parsedResult.order_detected && parsedResult.items && parsedResult.items.length > 0) {
-                  let total = 0;
-                  const orderItems = [];
-                  for (const item of parsedResult.items) {
-                    const menuItem = menuItems.find(m => m.name.toLowerCase() === item.name.toLowerCase());
-                    if (menuItem) {
-                      const qty = item.quantity || 1;
-                      total += menuItem.price * qty;
-                      orderItems.push({ menu_item_id: menuItem.id, quantity: qty, price: menuItem.price });
-                    }
-                  }
+                  // 2. Load previous history from db
+                  const historyRows = await db.all(
+                    "SELECT role, message FROM whatsapp_chat_history WHERE tenant_id = ? AND customer_phone = ? ORDER BY created_at DESC LIMIT 12",
+                    [tenantId, customerPhone]
+                  );
+                  const history = historyRows.reverse().map((row: any) => ({
+                    role: row.role === 'user' ? 'user' : 'model',
+                    parts: [{ text: row.message }]
+                  }));
 
-                  if (orderItems.length > 0) {
-                    const orderId = `wa_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                    await db.run("BEGIN TRANSACTION");
-                    try {
-                      await db.run(
-                        "INSERT INTO whatsapp_orders (id, tenant_id, items, total, status) VALUES (?, ?, ?, ?, ?)",
-                        [orderId, tenantId, JSON.stringify(orderItems), total, 'pending']
-                      );
-                      await db.run(
-                        "UPDATE metrics SET today_sales = today_sales + ?, ai_orders_count = ai_orders_count + 1 WHERE tenant_id = ?",
-                        [total, tenantId]
-                      );
-                      await db.run(
-                        "INSERT INTO ai_logs (tenant_id, role, message, timestamp, automation_type) VALUES (?, 'assistant', ?, ?, 'order')",
-                        [tenantId, `Orden creada automáticamente: ${orderItems.length} producto(s), total $${total.toFixed(2)}`, new Date().toISOString()]
-                      );
-                      // Also create in pos_orders for dashboard visibility
-                      const posOrderId = "pos_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
-                      await db.run(
-                        "INSERT INTO pos_orders (id, tenant_id, table_number, status, total) VALUES (?, ?, ?, ?, ?)",
-                        [posOrderId, tenantId, 'WhatsApp', 'pending', total]
-                      );
-                      for (const item of orderItems) {
-                        const poiId = "poi_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
-                        await db.run(
-                          "INSERT INTO pos_order_items (id, order_id, menu_item_id, quantity, price) VALUES (?, ?, ?, ?, ?)",
-                          [poiId, posOrderId, item.menu_item_id, item.quantity, item.price]
-                        );
-                      }
-                      await db.run("COMMIT");
-
-                      // Create delivery assignment for the owner to assign a driver
-                      const assignId = "da_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
-                      await db.run(
-                        "INSERT INTO delivery_assignments (id, tenant_id, order_id, customer_phone, status) VALUES (?, ?, ?, ?, 'pending')",
-                        [assignId, tenantId, posOrderId, customerPhone]
-                      );
-
-                      const confirmationText = `✅ Pedido #${orderId.substring(0, 12)} confirmado. Total: $${total.toFixed(2)}. ¡Lo recibirás pronto!`;
-                      await sock.sendMessage(customerPhone, { text: confirmationText });
-                      
-                      await db.run(
-                        "INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'model', ?)",
-                        [tenantId, customerPhone, confirmationText]
-                      );
-                    } catch (err) {
-                      await db.run("ROLLBACK");
-                      logger.error({ err }, "[WhatsApp] Transaction error creating order");
-                    }
-                  }
-                }
-              }
-            }
-
-            // ═══ LOCATION MESSAGE HANDLING ═══
-            const locationMsg = msg.message?.locationMessage;
-            if (locationMsg && tenantId !== 'system_admin') {
-              const customerLat = locationMsg.degreesLatitude;
-              const customerLng = locationMsg.degreesLongitude;
-              logger.info({ tenantId, lat: customerLat, lng: customerLng }, "[WhatsApp] Location received from customer");
-
-              const db = await initDb();
-              const settings = await db.get('SELECT latitude, longitude, delivery_base_fee, delivery_per_km_fee, delivery_max_distance FROM tenant_settings WHERE tenant_id = ?', [tenantId]);
-              
-              if (!settings || !settings.latitude || !settings.longitude) {
-                await sock.sendMessage(customerPhone, { text: "📍 Recibí tu ubicación, pero el restaurante aún no ha configurado su dirección en el mapa. Por favor contacta directamente para coordinar." });
-              } else {
-                // Haversine distance calculation
-                const R = 6371;
-                const dLat = (customerLat - settings.latitude) * Math.PI / 180;
-                const dLon = (customerLng - settings.longitude) * Math.PI / 180;
-                const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
-                          Math.cos(settings.latitude * Math.PI / 180) * Math.cos(customerLat * Math.PI / 180) * 
-                          Math.sin(dLon/2) * Math.sin(dLon/2);
-                const distanceKm = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 100) / 100;
-
-                const baseFee = Number(settings.delivery_base_fee) || 0;
-                const perKmFee = Number(settings.delivery_per_km_fee) || 0;
-                const maxDistance = Number(settings.delivery_max_distance) || 0;
-
-                // 1. Check maximum range limit
-                if (maxDistance > 0 && distanceKm > maxDistance) {
-                  const reply = `😔 Lo siento mucho, pero tu ubicación está a ${distanceKm} km de nosotros, y nuestro límite máximo de cobertura para delivery es de ${maxDistance} km.\n\n¡Pero si gustas puedes pasar a recoger tu pedido o comer en mesa! 🏃‍♂️`;
-                  await sock.sendMessage(customerPhone, { text: reply });
-                  await db.run("INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'model', ?)", [tenantId, customerPhone, reply]);
-                } else {
-                  // 2. Pure math cost calculation
-                  const calculatedFee = baseFee + (distanceKm * perKmFee);
+                  // 3. Check if bot is active (not paused by human)
+                  const chatControl = await db.get(
+                    "SELECT is_bot_active FROM whatsapp_chat_control WHERE tenant_id = ? AND customer_phone = ?",
+                    [tenantId, customerPhone]
+                  );
+                  const isBotActive = chatControl ? chatControl.is_bot_active !== 0 : true;
                   
-                  const reply = `📍 ¡Listo! Medí la distancia:\n📏 Separación: ${distanceKm} km\n🛵 Costo de Envío: $${calculatedFee.toFixed(2)}\n\n¿Estás de acuerdo con el cargo por envío? Responde 'SÍ' para formalizar el pedido.`;
+                  if (!isBotActive) {
+                    logger.info({ tenantId, customerPhone }, "[WhatsApp] Chat intercepted by HUMAN, skipping AI.");
+                    return; 
+                  }
+
+                  // 4. Call our unified processCustomerWhatsAppChat with tool calling
+                  const { processCustomerWhatsAppChat } = await import('./aiService.js');
+                  const reply = await processCustomerWhatsAppChat(
+                    tenantId,
+                    customerPhone,
+                    msg.pushName || '',
+                    textToProcess,
+                    history
+                  );
+
+                  // 5. Save model's reply to history
+                  await db.run(
+                    "INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'model', ?)",
+                    [tenantId, customerPhone, reply]
+                  );
+
+                  // 6. Send reply message on WhatsApp
                   await sock.sendMessage(customerPhone, { text: reply });
-                  await db.run("INSERT INTO whatsapp_chat_history (tenant_id, customer_phone, role, message) VALUES (?, ?, 'model', ?)", [tenantId, customerPhone, reply]);
                 }
               }
             }

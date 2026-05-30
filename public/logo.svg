@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="100%" height="100%">
+  <defs>
+    <!-- Emerald Green Gradient -->
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="50%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+
+    <!-- Electric Magenta Gradient -->
+    <linearGradient id="magentaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F472B6"/>
+      <stop offset="50%" stop-color="#EC4899"/>
+      <stop offset="100%" stop-color="#D946EF"/>
+    </linearGradient>
+
+    <!-- Glowing effect -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(20, 10)">
+    <!-- ================= LOGO ICON ================= -->
+    <g filter="url(#shadow)" transform="translate(0, -10)">
+      <!-- WhatsApp Bubble Base -->
+      <path d="M 50 110 
+               C 50 50, 110 10, 170 10 
+               C 230 10, 245 50, 245 95 
+               C 245 147.5, 192.5 177.5, 140 177.5 
+               C 128.75 177.5, 117.5 175.25, 106.25, 171.5 
+               L 61.25, 194 
+               L 70.25, 156.5 
+               C 57.5, 143.75, 50, 127.25, 50, 110 Z" 
+            fill="url(#emeraldGrad)"/>
+
+      <!-- Lightning Slice (AI & Express Speed) -->
+      <path d="M 151 5 
+               L 80 128.75 
+               L 136 128.75 
+               L 106 218.75 
+               L 192.5 91.25 
+               L 136.25 91.25 Z" 
+            fill="url(#magentaGrad)" 
+            filter="url(#glow)"/>
+
+      <!-- Inner white accent shimmer -->
+      <path d="M 136.25 91.25 
+               L 192.5 91.25 
+               L 155 147.5 Z" 
+            fill="#FFFFFF" 
+            opacity="0.3"/>
+    </g>
+
+    <!-- Glowing Nodes -->
+    <circle cx="212" cy="101" r="6" fill="#FFFFFF" filter="url(#glow)"/>
+    <circle cx="100" cy="138" r="4.5" fill="#FFFFFF" opacity="0.8"/>
+
+    <!-- ================= TYPOGRAPHY ================= -->
+    <!-- "WhatXpress" brand name -->
+    <text x="270" y="115" font-family="'Outfit', 'Inter', 'Segoe UI', sans-serif" font-weight="800" font-size="78" fill="#FFFFFF" letter-spacing="-1.5">
+      What<tspan fill="url(#magentaGrad)">Xpress</tspan>
+    </text>
+
+    <!-- Slogan / Subtext -->
+    <text x="275" y="155" font-family="'Inter', 'Segoe UI', sans-serif" font-weight="600" font-size="20" fill="#10B981" letter-spacing="4.5" opacity="0.9">
+      AI RESTAURANT PLATFORM
+    </text>
+
+    <!-- Tiny decorative AI tag -->
+    <rect x="705" y="52" width="45" height="22" rx="6" fill="none" stroke="#EC4899" stroke-width="1.5" stroke-opacity="0.7"/>
+    <text x="714" y="67" font-family="sans-serif" font-weight="bold" font-size="11" fill="#EC4899" opacity="0.8">AI</text>
+  </g>
+</svg>

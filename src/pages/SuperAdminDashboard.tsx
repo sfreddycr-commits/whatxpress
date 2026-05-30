@@ -29,7 +29,12 @@ import {
   CreditCard,
   Megaphone,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Cpu,
+  Layers,
+  Sparkles,
+  ChevronRight,
+  Database
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
@@ -66,6 +71,30 @@ export default function SuperAdminDashboard() {
   const [testingLive, setTestingLive] = useState(false);
   const [sandboxResult, setSandboxResult] = useState<any>(null);
   const [liveResult, setLiveResult] = useState<any>(null);
+  // New Dynamic AI Providers and Models state
+  const [providers, setProviders] = useState<any[]>([]);
+  const [activeProvider, setActiveProvider] = useState<any>(null);
+  const [models, setModels] = useState<any[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [isAddProviderOpen, setIsAddProviderOpen] = useState(false);
+  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+
+  const [newProvider, setNewProvider] = useState({
+    id: "",
+    display_name: "",
+    api_base_url: "",
+    api_key: ""
+  });
+
+  const [newModel, setNewModel] = useState({
+    model_id: "",
+    name: "",
+    description: "",
+    max_output_tokens: "",
+    context_window: ""
+  });
+
   const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const [simulatorLogs, setSimulatorLogs] = useState<any[]>([]);
   const [simulatorMessage, setSimulatorMessage] = useState("");
@@ -78,10 +107,16 @@ export default function SuperAdminDashboard() {
 
     Promise.all([
       fetch('/api/tenants', { headers }).then(r => r.json()).catch(() => ({})),
-      fetch('/api/admin/api-pool', { headers }).then(r => r.json()).catch(() => [])
-    ]).then(([overview, pool]) => {
+      fetch('/api/admin/api-pool', { headers }).then(r => r.json()).catch(() => []),
+      fetch('/api/admin/providers', { headers }).then(r => r.json()).catch(() => [])
+    ]).then(([overview, pool, providersData]) => {
       setGlobalData(overview);
       setApiPool(Array.isArray(pool) ? pool : []);
+      const provs = Array.isArray(providersData) ? providersData : [];
+      setProviders(provs);
+      if (provs.length > 0) {
+        setActiveProvider(provs[0]);
+      }
     }).catch(err => console.error("Error loading admin data:", err))
     .finally(() => setLoading(false));
   }, []);
@@ -92,6 +127,172 @@ export default function SuperAdminDashboard() {
     })
       .then(res => res.json())
       .then(data => setApiPool(data));
+  };
+
+  const fetchProviders = async () => {
+    setLoadingProviders(true);
+    try {
+      const headers = getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {};
+      const res = await fetch('/api/admin/providers', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setProviders(data);
+        if (data.length > 0) {
+          if (!activeProvider) {
+            setActiveProvider(data[0]);
+          } else {
+            const updatedActive = data.find((p: any) => p.id === activeProvider.id);
+            if (updatedActive) {
+              setActiveProvider(updatedActive);
+            } else {
+              setActiveProvider(data[0]);
+            }
+          }
+        } else {
+          setActiveProvider(null);
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching providers:", e);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeProvider) {
+      setLoadingModels(true);
+      fetch(`/api/admin/providers/${activeProvider.id}/models`, {
+        headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+      })
+        .then(res => res.json())
+        .then(data => setModels(Array.isArray(data) ? data : []))
+        .catch(err => console.error("Error loading models:", err))
+        .finally(() => setLoadingModels(false));
+    } else {
+      setModels([]);
+    }
+  }, [activeProvider]);
+
+  const handleToggleProviderActive = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/providers/${id}/toggle-active`, {
+        method: "PATCH",
+        headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+      });
+      if (res.ok) {
+        await fetchProviders();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleModelActive = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/models/${id}/toggle-active`, {
+        method: "PATCH",
+        headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+      });
+      if (res.ok && activeProvider) {
+        const modelRes = await fetch(`/api/admin/providers/${activeProvider.id}/models`, {
+          headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+        });
+        const mData = await modelRes.json();
+        setModels(Array.isArray(mData) ? mData : []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddProvider = async () => {
+    if (!newProvider.id || !newProvider.display_name || !newProvider.api_base_url) return;
+    try {
+      const res = await fetch('/api/admin/providers', {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getToken() && { 'Authorization': `Bearer ${getToken()}` })
+        },
+        body: JSON.stringify(newProvider)
+      });
+      if (res.ok) {
+        setNewProvider({ id: "", display_name: "", api_base_url: "", api_key: "" });
+        setIsAddProviderOpen(false);
+        await fetchProviders();
+      } else {
+        const error = await res.json();
+        alert(error.error || "Error registering provider");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteProvider = async (id: string) => {
+    if (!confirm("¿Estás seguro de eliminar este proveedor y todos sus modelos?")) return;
+    try {
+      const res = await fetch(`/api/admin/providers/${id}`, {
+        method: "DELETE",
+        headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+      });
+      if (res.ok) {
+        if (activeProvider && activeProvider.id === id) {
+          setActiveProvider(null);
+        }
+        await fetchProviders();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddModel = async () => {
+    if (!activeProvider || !newModel.model_id || !newModel.name) return;
+    try {
+      const res = await fetch(`/api/admin/providers/${activeProvider.id}/models`, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getToken() && { 'Authorization': `Bearer ${getToken()}` })
+        },
+        body: JSON.stringify(newModel)
+      });
+      if (res.ok) {
+        setNewModel({ model_id: "", name: "", description: "", max_output_tokens: "", context_window: "" });
+        setIsAddModelOpen(false);
+        const modelRes = await fetch(`/api/admin/providers/${activeProvider.id}/models`, {
+          headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+        });
+        const mData = await modelRes.json();
+        setModels(Array.isArray(mData) ? mData : []);
+      } else {
+        const error = await res.json();
+        alert(error.error || "Error adding model");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteModel = async (id: string) => {
+    if (!confirm("¿Estás seguro de eliminar este modelo?")) return;
+    try {
+      const res = await fetch(`/api/admin/models/${id}`, {
+        method: "DELETE",
+        headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+      });
+      if (res.ok && activeProvider) {
+        const modelRes = await fetch(`/api/admin/providers/${activeProvider.id}/models`, {
+          headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+        });
+        const mData = await modelRes.json();
+        setModels(Array.isArray(mData) ? mData : []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleAddKey = async () => {
@@ -1140,137 +1341,205 @@ export default function SuperAdminDashboard() {
           )}
 
           {activeTab === "api-pool" && (
-            <div className="max-w-5xl mx-auto py-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+            <div className="max-w-7xl mx-auto py-6 space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestión de Pool de APIs</h2>
-                  <p className="text-sm text-slate-500 font-medium">Administra múltiples llaves de Gemini para redundancia y alta disponibilidad.</p>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <Cpu className="w-6 h-6 text-[#109e38]" />
+                    Orquestador de Proveedores de IA
+                  </h2>
+                  <p className="text-sm text-slate-500 font-medium">Configura múltiples proveedores de IA (Google Gemini, OpenAI, Groq, etc.) y define qué modelos están activos de forma dinámica.</p>
                 </div>
-                <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="text-center px-4 border-r border-slate-100">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Saludables</div>
-                    <div className="text-xl font-black text-green-600">{apiPool.filter(k => k.status === 'healthy').length}</div>
-                  </div>
-                  <div className="text-center px-4">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Total</div>
-                    <div className="text-xl font-black text-slate-900">{apiPool.length}</div>
-                  </div>
-                </div>
+                <button
+                  onClick={() => setIsAddProviderOpen(true)}
+                  className="h-10 px-4 bg-[#109e38] hover:bg-[#0d842e] text-white rounded-xl text-sm font-bold shadow-sm shadow-[#109e38]/20 transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Registrar Proveedor
+                </button>
               </div>
 
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-                <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                  <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-sm font-bold text-slate-900">Agregar Nueva API Key</h3>
-                    <div className="group relative">
-                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
-                        <b>Tip Pro:</b> Google limita la cuota gratuita por proyecto. Al agregar llaves resididas en diferentes proyectos de GCP, multiplicas efectivamente tu capacidad de procesamiento sin costo.
+              {/* Grid layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* Providers List (Left Side - 5 columns) */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                        <Database className="w-4 h-4 text-slate-400" />
+                        Proveedores ({providers.length})
+                      </h3>
+                    </div>
+                    <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+                      {providers.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-sm italic">
+                          No hay proveedores registrados.
+                        </div>
+                      ) : (
+                        providers.map((p) => {
+                          const isActive = p.is_active === 1;
+                          const isSelected = activeProvider?.id === p.id;
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => setActiveProvider(p)}
+                              className={`p-4 transition-all duration-200 cursor-pointer flex items-center justify-between group relative border-l-4 ${
+                                isSelected 
+                                  ? "bg-slate-50/80 border-l-[#109e38]" 
+                                  : "border-l-transparent hover:bg-slate-50/30"
+                              }`}
+                            >
+                              <div className="flex-1 min-w-0 pr-2">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-slate-900 text-sm truncate">{p.display_name}</h4>
+                                  <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase">{p.id}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 truncate mt-1">{p.api_base_url}</p>
+                              </div>
+                              
+                              <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                                {/* Toggle switch */}
+                                <button
+                                  onClick={() => handleToggleProviderActive(p.id)}
+                                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                    isActive ? "bg-[#109e38]" : "bg-slate-200"
+                                  }`}
+                                >
+                                  <span
+                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                      isActive ? "translate-x-4" : "translate-x-0"
+                                    }`}
+                                  />
+                                </button>
+
+                                {/* Delete button for custom providers */}
+                                {p.id !== 'gemini' && (
+                                  <button
+                                    onClick={() => handleDeleteProvider(p.id)}
+                                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                    title="Eliminar Proveedor"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Models List (Right Side - 7 columns) */}
+                <div className="lg:col-span-7">
+                  {activeProvider ? (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      {/* Selected Provider Details Header */}
+                      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-black text-slate-900">{activeProvider.display_name}</h3>
+                            {activeProvider.is_active === 1 && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
+                                <ShieldCheck className="w-3 h-3 mr-1" /> Activo Global
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 font-medium">Modelos disponibles para enrutamiento inteligente.</p>
+                        </div>
+                        
+                        <button
+                          onClick={() => setIsAddModelOpen(true)}
+                          className="h-9 px-3 bg-[#109e38]/10 hover:bg-[#109e38]/20 text-[#109e38] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-center"
+                        >
+                          <Plus className="w-4 h-4" /> Agregar Modelo a {activeProvider.display_name}
+                        </button>
+                      </div>
+
+                      {/* Models Grid/List */}
+                      <div className="divide-y divide-slate-100">
+                        {loadingModels ? (
+                          <div className="p-12 text-center text-slate-400 text-sm">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#109e38]" />
+                            Cargando modelos...
+                          </div>
+                        ) : models.length === 0 ? (
+                          <div className="p-12 text-center text-slate-400 text-sm italic">
+                            No hay modelos agregados para este proveedor.
+                          </div>
+                        ) : (
+                          models.map((m) => {
+                            const isModelActive = m.is_active === 1;
+                            const isDefaultGeminiModel = activeProvider.id === 'gemini' && (m.model_id === 'gemini-2.5-flash' || m.model_id === 'gemini-2.0-flash' || m.model_id === 'gemini-1.5-flash');
+                            return (
+                              <div key={m.id} className="p-5 flex items-start justify-between hover:bg-slate-50/30 transition-all group">
+                                <div className="space-y-1 pr-4">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-slate-900 text-sm">{m.name}</h4>
+                                    <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{m.model_id}</span>
+                                    {isModelActive && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#109e38]/15 text-[#109e38]">
+                                        En Uso
+                                      </span>
+                                    )}
+                                  </div>
+                                  {m.description && <p className="text-xs text-slate-400 leading-relaxed max-w-md">{m.description}</p>}
+                                  <div className="flex items-center gap-4 text-[10px] text-slate-400 font-semibold pt-1">
+                                    {m.context_window && (
+                                      <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                        Contexto: {m.context_window.toLocaleString()} tokens
+                                      </span>
+                                    )}
+                                    {m.max_output_tokens && (
+                                      <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                        Max Output: {m.max_output_tokens.toLocaleString()} tokens
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  {/* Toggle Switch */}
+                                  <button
+                                    onClick={() => handleToggleModelActive(m.id)}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                      isModelActive ? "bg-[#109e38]" : "bg-slate-200"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                        isModelActive ? "translate-x-4" : "translate-x-0"
+                                      }`}
+                                    />
+                                  </button>
+
+                                  {/* Delete model */}
+                                  {!isDefaultGeminiModel && (
+                                    <button
+                                      onClick={() => handleDeleteModel(m.id)}
+                                      className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                      title="Eliminar Modelo"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="relative flex-1">
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input 
-                        type="password" 
-                        value={newKey}
-                        onChange={(e) => setNewKey(e.target.value)}
-                        placeholder="Pega tu GEMINI_API_KEY aquí..." 
-                        className="w-full h-12 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
-                      />
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-400">
+                      <Cpu className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      Selecciona un proveedor para gestionar sus modelos disponibles.
                     </div>
-                    <button 
-                      onClick={handleAddKey}
-                      disabled={isAddingKey || !newKey.trim()}
-                      className="h-12 px-6 bg-[#109e38] hover:bg-[#0d842e] disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-[#109e38]/20 transition-all flex items-center gap-2 whitespace-nowrap"
-                    >
-                      {isAddingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                      Registrar Key
-                    </button>
-                  </div>
-                  <p className="mt-3 text-[10px] text-slate-400 font-medium">Recomendamos usar llaves de diferentes proyectos de Google Cloud para maximizar los límites de la cuota gratuita.</p>
+                  )}
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                        <th className="px-6 py-4">API Key (Masked)</th>
-                        <th className="px-6 py-4">Estado</th>
-                        <th className="px-6 py-4">Fallas</th>
-                        <th className="px-6 py-4">Último Uso</th>
-                        <th className="px-6 py-4 text-right">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {apiPool.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center text-slate-400 text-sm italic">No hay llaves en el pool secundario.</td>
-                        </tr>
-                      ) : apiPool.map((key) => (
-                        <tr key={key.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-mono text-xs text-slate-600">
-                            {key.key_value.substring(0, 8)}••••••••••••{key.key_value.substring(key.key_value.length - 4)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              key.status === 'healthy' ? "text-green-700 bg-green-50 border-green-200" :
-                              key.status === 'rate_limited' ? "text-orange-700 bg-orange-50 border-orange-200" :
-                              "text-red-700 bg-red-50 border-red-200"
-                            }`}>
-                              {key.status === 'healthy' && <ShieldCheck className="w-3 h-3 mr-1" />}
-                              {key.status === 'rate_limited' && <Activity className="w-3 h-3 mr-1" />}
-                              {key.status === 'invalid' && <AlertCircle className="w-3 h-3 mr-1" />}
-                              {key.status.replace('_', ' ').toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-900">{key.fail_count}</td>
-                          <td className="px-6 py-4 text-[10px] font-medium text-slate-500">{key.last_used_at ? new Date(key.last_used_at).toLocaleString() : 'Nunca'}</td>
-                          <td className="px-6 py-4 text-right">
-                             <div className="flex justify-end gap-2">
-                               <button 
-                                onClick={() => handleResetKey(key.id)}
-                                title="Reset Status"
-                                className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
-                               >
-                                 <RefreshCw className="w-4 h-4" />
-                               </button>
-                               <button 
-                                onClick={() => handleDeleteKey(key.id)}
-                                title="Delete Key"
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                               >
-                                 <Trash2 className="w-4 h-4" />
-                               </button>
-                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-[#109e38]" />
-                    ¿Cómo funciona el Pool?
-                  </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    El sistema utiliza una lógica de <b>rotación FIFO (First In, First Out)</b>. Cada vez que se realiza una petición, se selecciona la llave que lleva más tiempo sin usarse. Esto distribuye la carga equitativamente entre todas tus llaves activas.
-                  </p>
-                </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-[#109e38]" />
-                    Auto-Sanación
-                  </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Si una llave falla por límites de cuota o error de autenticación, el sistema la marca automáticamente como "Rate Limited" o "Invalid" y salta a la siguiente llave sin interrumpir el servicio al cliente final.
-                  </p>
-                </div>
               </div>
             </div>
           )}
@@ -1606,6 +1875,184 @@ export default function SuperAdminDashboard() {
               <div className="p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 shrink-0">
                 <button type="button" onClick={() => setShowFlowModal(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors">Cancelar</button>
                 <button type="submit" form="flow-form" className="px-4 py-2 bg-[#109e38] hover:bg-[#0d842e] text-white text-sm font-bold rounded-xl transition-colors">Guardar Flujo</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Provider Modal */}
+        {isAddProviderOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Database className="w-5 h-5 text-[#109e38]" />
+                  <h3 className="font-black text-slate-900 tracking-tight">Registrar Proveedor de IA</h3>
+                </div>
+                <button 
+                  onClick={() => setIsAddProviderOpen(false)} 
+                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">ID Único del Proveedor (Minúsculas, sin espacios)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newProvider.id}
+                    onChange={(e) => setNewProvider({...newProvider, id: e.target.value.toLowerCase().replace(/\s/g, '')})}
+                    placeholder="Ej. openai, groq, deepseek, anthropic" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400 font-medium">Este ID identificará internamente al proveedor en el router de llamadas.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Nombre para Mostrar</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newProvider.display_name}
+                    onChange={(e) => setNewProvider({...newProvider, display_name: e.target.value})}
+                    placeholder="Ej. OpenAI, Groq Cloud, Anthropic" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">API Base URL</label>
+                  <input 
+                    type="url" 
+                    required 
+                    value={newProvider.api_base_url}
+                    onChange={(e) => setNewProvider({...newProvider, api_base_url: e.target.value})}
+                    placeholder="Ej. https://api.openai.com/v1" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400 font-medium">La URL raíz para las peticiones HTTP que siguen el estándar oficial de OpenAI.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">API Key (Opcional - Puede venir de las variables de entorno)</label>
+                  <input 
+                    type="password" 
+                    value={newProvider.api_key}
+                    onChange={(e) => setNewProvider({...newProvider, api_key: e.target.value})}
+                    placeholder="••••••••••••••••••••••••••••" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+              </div>
+              <div className="p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAddProviderOpen(false)} 
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  disabled={!newProvider.id || !newProvider.display_name || !newProvider.api_base_url}
+                  onClick={handleAddProvider} 
+                  className="px-4 py-2 bg-[#109e38] hover:bg-[#0d842e] disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-all"
+                >
+                  Registrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Model Modal */}
+        {isAddModelOpen && activeProvider && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-5 h-5 text-[#109e38]" />
+                  <h3 className="font-black text-slate-900 tracking-tight">Agregar Modelo a {activeProvider.display_name}</h3>
+                </div>
+                <button 
+                  onClick={() => setIsAddModelOpen(false)} 
+                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">ID del Modelo (Según API del Proveedor)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newModel.model_id}
+                    onChange={(e) => setNewModel({...newModel, model_id: e.target.value.trim()})}
+                    placeholder="Ej. gpt-4o, llama-3.1-70b-versatile, claude-3-5-sonnet" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400 font-medium">Este ID debe coincidir exactamente con el esperado por la API de tu proveedor.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Nombre Descriptivo</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newModel.name}
+                    onChange={(e) => setNewModel({...newModel, name: e.target.value})}
+                    placeholder="Ej. GPT-4o Flagship, LLaMA 3.1 70B Fast" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Descripción del Modelo</label>
+                  <textarea 
+                    rows={2}
+                    value={newModel.description}
+                    onChange={(e) => setNewModel({...newModel, description: e.target.value})}
+                    placeholder="Breve explicación de las fortalezas de este modelo..." 
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Context Window (Tokens)</label>
+                    <input 
+                      type="number" 
+                      value={newModel.context_window}
+                      onChange={(e) => setNewModel({...newModel, context_window: e.target.value})}
+                      placeholder="Ej. 128000" 
+                      className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Max Output Tokens</label>
+                    <input 
+                      type="number" 
+                      value={newModel.max_output_tokens}
+                      onChange={(e) => setNewModel({...newModel, max_output_tokens: e.target.value})}
+                      placeholder="Ej. 4096" 
+                      className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAddModelOpen(false)} 
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  disabled={!newModel.model_id || !newModel.name}
+                  onClick={handleAddModel} 
+                  className="px-4 py-2 bg-[#109e38] hover:bg-[#0d842e] disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-all"
+                >
+                  Agregar Modelo
+                </button>
               </div>
             </div>
           </div>

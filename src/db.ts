@@ -1,16 +1,29 @@
 import pg from 'pg';
+import { DatabaseSync } from 'node:sqlite';
 import { logger } from './lib/logger.js';
 const { Pool } = pg;
 
 let dbInstance: any = null;
 
 export class DBWrapper {
-  private pool: pg.Pool;
+  private pool: pg.Pool | null = null;
+  private sqliteDb: any = null;
+  private isSqlite: boolean = false;
 
-  constructor(connectionString: string) {
-    this.pool = new Pool({
-      connectionString,
-    });
+  constructor(connectionString: string, isSqlite: boolean = false, sqliteFile: string = './local.sqlite') {
+    this.isSqlite = isSqlite;
+    if (isSqlite) {
+      this.sqliteDb = new DatabaseSync(sqliteFile);
+    } else {
+      this.pool = new Pool({
+        connectionString,
+      });
+    }
+  }
+
+  private translateSqlToSqlite(sql: string): string {
+    // SQLite doesn't use SERIAL, convert to INTEGER PRIMARY KEY AUTOINCREMENT
+    return sql.replace(/SERIAL PRIMARY KEY/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT');
   }
 
   private translateSql(sql: string): string {
@@ -76,36 +89,68 @@ export class DBWrapper {
   }
 
   async exec(sql: string) {
-    const queries = sql.split(';').map(q => q.trim()).filter(q => q.length > 0);
-    for (const q of queries) {
-      const pgSql = this.translateSql(q);
-      await this.pool.query(pgSql);
+    if (this.isSqlite) {
+      const sqliteSql = this.translateSqlToSqlite(sql);
+      this.sqliteDb.exec(sqliteSql);
+    } else {
+      const queries = sql.split(';').map(q => q.trim()).filter(q => q.length > 0);
+      for (const q of queries) {
+        const pgSql = this.translateSql(q);
+        await this.pool!.query(pgSql);
+      }
     }
   }
 
   async get<T = any>(sql: string, params: any[] = []): Promise<T | null> {
-    const pgSql = this.translateSql(sql);
-    const res = await this.pool.query(pgSql, params);
-    return res.rows[0] || null;
+    if (this.isSqlite) {
+      const sqliteSql = this.translateSqlToSqlite(sql);
+      const stmt = this.sqliteDb.prepare(sqliteSql);
+      const row = stmt.get(...params);
+      return (row as T) || null;
+    } else {
+      const pgSql = this.translateSql(sql);
+      const res = await this.pool!.query(pgSql, params);
+      return res.rows[0] || null;
+    }
   }
 
   async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-    const pgSql = this.translateSql(sql);
-    const res = await this.pool.query(pgSql, params);
-    return res.rows;
+    if (this.isSqlite) {
+      const sqliteSql = this.translateSqlToSqlite(sql);
+      const stmt = this.sqliteDb.prepare(sqliteSql);
+      return stmt.all(...params) as T[];
+    } else {
+      const pgSql = this.translateSql(sql);
+      const res = await this.pool!.query(pgSql, params);
+      return res.rows;
+    }
   }
 
   async run(sql: string, params: any[] = []) {
-    const pgSql = this.translateSql(sql);
-    const res = await this.pool.query(pgSql, params);
-    return {
-      changes: res.rowCount || 0,
-      lastID: null
-    };
+    if (this.isSqlite) {
+      const sqliteSql = this.translateSqlToSqlite(sql);
+      const stmt = this.sqliteDb.prepare(sqliteSql);
+      const info = stmt.run(...params);
+      return {
+        changes: info.changes || 0,
+        lastID: info.lastInsertRowid ? String(info.lastInsertRowid) : null
+      };
+    } else {
+      const pgSql = this.translateSql(sql);
+      const res = await this.pool!.query(pgSql, params);
+      return {
+        changes: res.rowCount || 0,
+        lastID: null
+      };
+    }
   }
 
   async close() {
-    await this.pool.end();
+    if (this.isSqlite) {
+      this.sqliteDb.close();
+    } else {
+      await this.pool!.end();
+    }
   }
 }
 
@@ -119,17 +164,38 @@ export function getDb(): DBWrapper {
 export async function initDb() {
   if (dbInstance) return dbInstance;
 
-  logger.info("initDb: Opening PostgreSQL database...");
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error('DATABASE_URL environment variable is required');
-  
-  try {
-    const db = new DBWrapper(connectionString);
-    logger.info("initDb: Database connected successfully.");
+  const dbClient = process.env.DB_CLIENT || 'postgres';
 
+  if (dbClient === 'sqlite') {
+    logger.info("initDb: Opening SQLite database (native)...");
+    const sqliteFile = process.env.SQLITE_FILE || './local.sqlite';
+    try {
+      const db = new DBWrapper('', true, sqliteFile);
+      logger.info(`initDb: SQLite database connected successfully at ${sqliteFile}.`);
+      dbInstance = db;
+    } catch (err) {
+      logger.error({ err }, "initDb: CRITICAL ERROR during SQLite database initialization");
+      throw err;
+    }
+  } else {
+    logger.info("initDb: Opening PostgreSQL database...");
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error('DATABASE_URL environment variable is required');
+    try {
+      const db = new DBWrapper(connectionString);
+      logger.info("initDb: Database connected successfully.");
+      dbInstance = db;
+    } catch (err) {
+      logger.error({ err }, "initDb: CRITICAL ERROR during PostgreSQL database initialization");
+      throw err;
+    }
+  }
+
+  try {
+    const db = dbInstance;
     // Create tables if they don't exist with full columns synchronized
     logger.info("initDb: Executing table creation...");
-    await db.exec(`
+    await dbInstance.exec(`
       CREATE TABLE IF NOT EXISTS tenants (
         id TEXT PRIMARY KEY,
         name TEXT,
@@ -592,6 +658,34 @@ export async function initDb() {
       `);
     } catch (e) {}
 
+    try {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_providers (
+          id TEXT PRIMARY KEY,
+          display_name TEXT NOT NULL,
+          api_base_url TEXT NOT NULL,
+          api_key TEXT,
+          is_active INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'healthy',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS ai_models (
+          id TEXT PRIMARY KEY,
+          provider_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          max_output_tokens INTEGER,
+          context_window INTEGER,
+          is_active INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(provider_id) REFERENCES ai_providers(id) ON DELETE CASCADE
+        );
+      `);
+    } catch (e) {
+      logger.error({ err: e }, "initDb: Error creating AI Providers or Models tables");
+    }
+
     try { await db.exec(`ALTER TABLE whatsapp_contacts ADD COLUMN is_archived INTEGER DEFAULT 0;`); } catch (e) {}
     try { await db.exec(`ALTER TABLE tenants ADD COLUMN mrr INTEGER DEFAULT 0;`); } catch (e) {}
     try { await db.exec(`ALTER TABLE tenants ADD COLUMN bg_color TEXT;`); } catch (e) {}
@@ -684,6 +778,24 @@ export async function initDb() {
         await db.run("INSERT INTO communication_flows (id, title, type, status, color, description) VALUES (?, ?, ?, ?, ?, ?)",
           [f.id, f.title, f.type, f.status, f.color, f.desc]);
       }
+    }
+
+    // Seed initial AI provider and model if empty
+    try {
+      const providerCount = await db.get('SELECT COUNT(*) as count FROM ai_providers');
+      if (providerCount && Number(providerCount.count) === 0) {
+        logger.info('initDb: Seeding default Gemini AI Provider and Model...');
+        await db.run(
+          "INSERT INTO ai_providers (id, display_name, api_base_url, api_key, is_active) VALUES (?, ?, ?, ?, ?)",
+          ['gemini', 'Google Gemini', 'https://generativelanguage.googleapis.com', 'GEMINI_API_KEY', 1]
+        );
+        await db.run(
+          "INSERT INTO ai_models (id, provider_id, model_id, name, description, max_output_tokens, context_window, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          ['gemini:gemini-2.5-flash', 'gemini', 'gemini-2.5-flash', 'Gemini 2.5 Flash', 'Standard fast dynamic model', 8192, 1048576, 1]
+        );
+      }
+    } catch (e) {
+      logger.error({ err: e }, "initDb: Error seeding default AI provider");
     }
 
     dbInstance = db;

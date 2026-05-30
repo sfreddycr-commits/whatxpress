@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcrypt';
 import { getDb } from '../db.js';
 import { AuthService } from '../services/authService.js';
 import { JWT_SECRET } from '../middleware/auth.js';
@@ -99,8 +100,23 @@ router.post("/driver-login", async (req, res) => {
 export async function registerPublicAlternative(req: express.Request, res: express.Response) {
   try {
     const db = getDb();
-    const { name, email, password } = req.body;
+    const { name, email, password, phone } = req.body;
+
+    if (!name || !email || !password) {
+      res.status(400).json({ error: 'Nombre, email y contraseña son requeridos' });
+      return;
+    }
+
+    const existingUser = await db.get("SELECT id FROM users WHERE email = ?", [email]);
+    if (existingUser) {
+      res.status(400).json({ error: 'El email ya está registrado' });
+      return;
+    }
+
     const tenantId = "tenant_" + Math.random().toString(36).substr(2, 9);
+    const userId = "user_" + Date.now();
+    const passwordHash = await bcrypt.hash(password, 12);
+    
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 7);
     
@@ -114,28 +130,45 @@ export async function registerPublicAlternative(req: express.Request, res: expre
     const bgColor = colors[Math.floor(Math.random() * colors.length)];
     const initLetters = (name || "RT").substring(0, 2).toUpperCase();
 
-    await db.run(
-      "INSERT INTO tenants (id, name, status, plan, mrr, bg_color, init_letters, trial_ends_at, subscription_status, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [tenantId, name, 'Active', 'Pro', 0, bgColor, initLetters, trialEndDate.toISOString(), 'trialing', password]
-    );
+    await db.run("BEGIN TRANSACTION");
+    try {
+      await db.run(
+        "INSERT INTO tenants (id, name, status, plan, mrr, bg_color, init_letters, trial_ends_at, subscription_status, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [tenantId, name, 'Active', 'Pro', 0, bgColor, initLetters, trialEndDate.toISOString(), 'trialing', passwordHash]
+      );
 
-    await db.run(
-      "INSERT INTO tenant_settings (tenant_id, country, currency, country_code, phone_number, whatsapp_number, smtp_host, smtp_port, smtp_user, smtp_pass, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [tenantId, 'MX', 'MXN', '+52', '', '', '', 587, '', '', '']
-    );
+      await db.run(
+        "INSERT INTO users (id, name, email, password_hash, phone, role) VALUES (?, ?, ?, ?, ?, ?)",
+        [userId, name, email, passwordHash, phone || '', 'admin']
+      );
 
-    // Create defaults for new tenant
-    await db.run("INSERT INTO metrics (tenant_id, today_sales, ai_orders_count, automation_rate, active_tables, total_tables, pending_deliveries, attention_deliveries) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [tenantId, 0, 0, 0, 0, 0, 0, 0]);
-    
-    const welcomeMsg = `Soy el agente virtual de ${name || "nuestro restaurante"}. ¡Gracias por comunicarte a ${name || "nuestro restaurante"}!`;
-    await db.run("INSERT INTO ai_config (tenant_id, custom_instructions, identity_prompt, auto_upselling, reservation_confirmation, loyalty_rewards) VALUES (?, ?, ?, ?, ?, ?)",
-      [tenantId, 'Always be polite and helpful. Welcome the customer to our restaurant.', welcomeMsg, 1, 1, 0]);
+      await db.run(
+        "INSERT INTO user_tenants (user_id, tenant_id, role) VALUES (?, ?, ?)",
+        [userId, tenantId, 'owner']
+      );
 
-    res.json({ success: true, tenantId });
-  } catch (e) {
+      await db.run(
+        "INSERT INTO tenant_settings (tenant_id, country, currency, country_code, phone_number, whatsapp_number, smtp_host, smtp_port, smtp_user, smtp_pass, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [tenantId, 'MX', 'MXN', '+52', '', '', '', 587, '', '', '']
+      );
+
+      // Create defaults for new tenant
+      await db.run("INSERT INTO metrics (tenant_id, today_sales, ai_orders_count, automation_rate, active_tables, total_tables, pending_deliveries, attention_deliveries) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [tenantId, 0, 0, 0, 0, 0, 0, 0]);
+      
+      const welcomeMsg = `Soy el agente virtual de ${name || "nuestro restaurante"}. ¡Gracias por comunicarte a ${name || "nuestro restaurante"}!`;
+      await db.run("INSERT INTO ai_config (tenant_id, custom_instructions, identity_prompt, auto_upselling, reservation_confirmation, loyalty_rewards) VALUES (?, ?, ?, ?, ?, ?)",
+        [tenantId, 'Always be polite and helpful. Welcome the customer to our restaurant.', welcomeMsg, 1, 1, 0]);
+
+      await db.run("COMMIT");
+      res.json({ success: true, tenantId });
+    } catch (transactionErr) {
+      await db.run("ROLLBACK");
+      throw transactionErr;
+    }
+  } catch (e: any) {
     logger.error({ err: e }, "[public-register]");
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: String(e.message || e) });
   }
 }
 

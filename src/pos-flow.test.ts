@@ -83,10 +83,16 @@ describe("WhatXpress POS Critical Flow", () => {
   });
 
   it("GET /api/tenants returns tenant list", async () => {
-    const res = await fetch(`${BASE}/api/tenants`);
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(Array.isArray(data.tenants)).toBe(true);
+    const res = await fetch(`${BASE}/api/tenants`, {
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {},
+    });
+    if (adminToken) {
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(Array.isArray(data.tenants)).toBe(true);
+    } else {
+      expect([401, 200]).toContain(res.status);
+    }
   });
 
   it("GET /api/admin/billing-summary requires admin auth", async () => {

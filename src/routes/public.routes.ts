@@ -1,6 +1,7 @@
 import express from 'express';
 import { getDb } from '../db.js';
 import { logger } from '../lib/logger.js';
+import { registerPublicAlternative } from './auth.routes.js';
 
 const router = express.Router();
 
@@ -49,6 +50,12 @@ router.get("/plans", async (req, res) => {
     res.status(500).json({ error: String(e) });
   }
 });
+
+/**
+ * @route   POST /api/public/register
+ * @desc    Public self-service registration flow (Landing page signup)
+ */
+router.post("/register", registerPublicAlternative);
 
 /**
  * @route   GET /api/public/track/:type/:token
