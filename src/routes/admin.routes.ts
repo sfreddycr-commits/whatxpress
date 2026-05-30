@@ -287,6 +287,72 @@ router.patch("/models/:id/toggle-active", requireAdmin, async (req, res) => {
   }
 });
 
+router.post("/models/:id/test", requireAdmin, async (req, res) => {
+  try {
+    const db = getDb();
+    const { id } = req.params;
+    
+    // Fetch model details
+    const model = await db.get("SELECT * FROM ai_models WHERE id = ?", [id]);
+    if (!model) {
+      return res.status(404).json({ error: "Model not found" });
+    }
+    
+    // Fetch parent provider details
+    const provider = await db.get("SELECT * FROM ai_providers WHERE id = ?", [model.provider_id]);
+    if (!provider) {
+      return res.status(404).json({ error: "Provider not found" });
+    }
+
+    const apiKey = provider.api_key || process.env.GEMINI_API_KEY || "";
+    if (!apiKey) {
+      return res.status(400).json({ error: "No API key configured for this provider" });
+    }
+
+    let replyText = "";
+
+    if (provider.id === "gemini") {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: model.model_id,
+        contents: "Responde únicamente con la palabra '¡Conexión Exitosa!'",
+        config: { maxOutputTokens: 20 }
+      });
+      replyText = response.text || "";
+    } else {
+      // Standard OpenAI Chat Completion request
+      const endpoint = `${provider.api_base_url.replace(/\/$/, "")}/chat/completions`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model.model_id,
+          messages: [
+            { role: "user", content: "Responde únicamente con la palabra '¡Conexión Exitosa!'" }
+          ],
+          max_tokens: 20
+        })
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errBody || response.statusText}`);
+      }
+
+      const json: any = await response.json();
+      replyText = json.choices?.[0]?.message?.content || "";
+    }
+
+    res.json({ success: true, response: replyText.trim() });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
 /**
  * TENANTS CRUD (SuperAdmin)
  */

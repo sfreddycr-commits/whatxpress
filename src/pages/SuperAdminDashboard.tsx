@@ -79,6 +79,8 @@ export default function SuperAdminDashboard() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState(false);
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+  const [testingModelId, setTestingModelId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; response?: string; error?: string }>>({});
 
   const [newProvider, setNewProvider] = useState({
     id: "",
@@ -203,6 +205,41 @@ export default function SuperAdminDashboard() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleTestModelConnection = async (id: string) => {
+    setTestingModelId(id);
+    setTestResults(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+    try {
+      const res = await fetch(`/api/admin/models/${id}/test`, {
+        method: "POST",
+        headers: getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {}
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResults(prev => ({
+          ...prev,
+          [id]: { success: true, response: data.response }
+        }));
+      } else {
+        setTestResults(prev => ({
+          ...prev,
+          [id]: { success: false, error: data.error || "Error al verificar la conexión" }
+        }));
+      }
+    } catch (e: any) {
+      console.error(e);
+      setTestResults(prev => ({
+        ...prev,
+        [id]: { success: false, error: e.message || String(e) }
+      }));
+    } finally {
+      setTestingModelId(null);
     }
   };
 
@@ -1473,59 +1510,109 @@ export default function SuperAdminDashboard() {
                           models.map((m) => {
                             const isModelActive = m.is_active === 1;
                             const isDefaultGeminiModel = activeProvider.id === 'gemini' && (m.model_id === 'gemini-2.5-flash' || m.model_id === 'gemini-2.0-flash' || m.model_id === 'gemini-1.5-flash');
+                            const isTesting = testingModelId === m.id;
+                            const testResult = testResults[m.id];
                             return (
-                              <div key={m.id} className="p-5 flex items-start justify-between hover:bg-slate-50/30 transition-all group">
-                                <div className="space-y-1 pr-4">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-slate-900 text-sm">{m.name}</h4>
-                                    <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{m.model_id}</span>
-                                    {isModelActive && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#109e38]/15 text-[#109e38]">
-                                        En Uso
-                                      </span>
-                                    )}
+                              <div key={m.id} className="p-5 flex flex-col hover:bg-slate-50/30 transition-all group">
+                                <div className="flex items-start justify-between w-full">
+                                  <div className="space-y-1 pr-4">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-bold text-slate-900 text-sm">{m.name}</h4>
+                                      <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{m.model_id}</span>
+                                      {isModelActive && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#109e38]/15 text-[#109e38]">
+                                          En Uso
+                                        </span>
+                                      )}
+                                    </div>
+                                    {m.description && <p className="text-xs text-slate-400 leading-relaxed max-w-md mt-0.5">{m.description}</p>}
+                                    <div className="flex items-center gap-4 text-[10px] text-slate-400 font-semibold pt-1">
+                                      {m.context_window && (
+                                        <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                          Contexto: {m.context_window.toLocaleString()} tokens
+                                        </span>
+                                      )}
+                                      {m.max_output_tokens && (
+                                        <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                          Max Output: {m.max_output_tokens.toLocaleString()} tokens
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  {m.description && <p className="text-xs text-slate-400 leading-relaxed max-w-md">{m.description}</p>}
-                                  <div className="flex items-center gap-4 text-[10px] text-slate-400 font-semibold pt-1">
-                                    {m.context_window && (
-                                      <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                                        Contexto: {m.context_window.toLocaleString()} tokens
-                                      </span>
-                                    )}
-                                    {m.max_output_tokens && (
-                                      <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                                        Max Output: {m.max_output_tokens.toLocaleString()} tokens
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
 
-                                <div className="flex items-center gap-3">
-                                  {/* Toggle Switch */}
-                                  <button
-                                    onClick={() => handleToggleModelActive(m.id)}
-                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                      isModelActive ? "bg-[#109e38]" : "bg-slate-200"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                        isModelActive ? "translate-x-4" : "translate-x-0"
-                                      }`}
-                                    />
-                                  </button>
-
-                                  {/* Delete model */}
-                                  {!isDefaultGeminiModel && (
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    {/* Test Connection Button */}
                                     <button
-                                      onClick={() => handleDeleteModel(m.id)}
-                                      className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                      title="Eliminar Modelo"
+                                      onClick={() => handleTestModelConnection(m.id)}
+                                      disabled={isTesting}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                                        isTesting 
+                                          ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                                          : "bg-[#109e38]/10 text-[#109e38] hover:bg-[#109e38]/20"
+                                      }`}
+                                      title="Probar Conexión con IA"
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      {isTesting ? (
+                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Activity className="w-3.5 h-3.5" />
+                                      )}
+                                      {isTesting ? "Probando..." : "Probar"}
                                     </button>
-                                  )}
+
+                                    {/* Toggle Switch */}
+                                    <button
+                                      onClick={() => handleToggleModelActive(m.id)}
+                                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                        isModelActive ? "bg-[#109e38]" : "bg-slate-200"
+                                      }`}
+                                    >
+                                      <span
+                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                          isModelActive ? "translate-x-4" : "translate-x-0"
+                                        }`}
+                                      />
+                                    </button>
+
+                                    {/* Delete model */}
+                                    {!isDefaultGeminiModel && (
+                                      <button
+                                        onClick={() => handleDeleteModel(m.id)}
+                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                        title="Eliminar Modelo"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
+
+                                {/* Connection Test Response Status */}
+                                {testResult && (
+                                  <div className="mt-3 w-full">
+                                    {testResult.success ? (
+                                      <div className="flex items-start gap-2.5 bg-green-50 border border-green-100 p-3 rounded-2xl text-xs text-[#109e38] font-bold">
+                                        <Check className="w-4 h-4 mt-0.5 shrink-0" />
+                                        <div>
+                                          <div className="font-extrabold text-[#0d842e]">¡Conexión Exitosa!</div>
+                                          <div className="font-medium text-green-700/80 mt-0.5 bg-white/60 p-2 rounded-xl border border-green-100/50">
+                                            Respuesta de la IA: &quot;{testResult.response}&quot;
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 p-3 rounded-2xl text-xs text-red-700 font-bold">
+                                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                        <div>
+                                          <div className="font-extrabold text-red-800">Fallo de Conexión</div>
+                                          <div className="font-medium text-red-600/90 mt-0.5 font-mono break-words bg-white/60 p-2 rounded-xl border border-red-100/50">
+                                            {testResult.error}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })
