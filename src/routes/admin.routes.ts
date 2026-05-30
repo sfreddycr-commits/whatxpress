@@ -295,18 +295,18 @@ router.post("/models/:id/test", requireAdmin, async (req, res) => {
     // Fetch model details
     const model = await db.get("SELECT * FROM ai_models WHERE id = ?", [id]);
     if (!model) {
-      return res.status(404).json({ error: "Model not found" });
+      return res.json({ success: false, error: "Model not found" });
     }
     
     // Fetch parent provider details
     const provider = await db.get("SELECT * FROM ai_providers WHERE id = ?", [model.provider_id]);
     if (!provider) {
-      return res.status(404).json({ error: "Provider not found" });
+      return res.json({ success: false, error: "Provider not found" });
     }
 
     const apiKey = provider.api_key || process.env.GEMINI_API_KEY || "";
     if (!apiKey) {
-      return res.status(400).json({ error: "No API key configured for this provider" });
+      return res.json({ success: false, error: "No API key configured for this provider" });
     }
 
     let replyText = "";
@@ -334,13 +334,14 @@ router.post("/models/:id/test", requireAdmin, async (req, res) => {
           messages: [
             { role: "user", content: "Responde únicamente con la palabra '¡Conexión Exitosa!'" }
           ],
-          max_tokens: 20
+          max_tokens: 20,
+          stream: false
         })
       });
 
       if (!response.ok) {
         const errBody = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errBody || response.statusText}`);
+        return res.json({ success: false, error: `HTTP ${response.status}: ${errBody || response.statusText}` });
       }
 
       const json: any = await response.json();
@@ -349,7 +350,7 @@ router.post("/models/:id/test", requireAdmin, async (req, res) => {
 
     res.json({ success: true, response: replyText.trim() });
   } catch (e: any) {
-    res.status(500).json({ error: e.message || String(e) });
+    res.json({ success: false, error: e.message || String(e) });
   }
 });
 
