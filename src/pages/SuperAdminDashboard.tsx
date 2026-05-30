@@ -809,7 +809,7 @@ export default function SuperAdminDashboard() {
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-900 mb-4">Revenue Growth (ARR)</h3>
                   <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                       <AreaChart data={arrData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorArr" x1="0" y1="0" x2="0" y2="1">
@@ -833,7 +833,7 @@ export default function SuperAdminDashboard() {
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-900 mb-4">AI Processing Requests</h3>
                   <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                       <BarChart data={dataAI} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => `${val/1000}k`} />
@@ -901,11 +901,18 @@ export default function SuperAdminDashboard() {
                          { name: "Core API", status: "Operational", sub: "99.99% Uptime", icon: "Activity", color: "green" },
                          { name: "WhatsApp Gateway", status: "Stable", sub: "12ms latency", icon: "MessageSquare", color: "green" },
                          { name: "AI Inference", status: "Operational", sub: "Normal Load", icon: "Bot", color: "green" },
-                       ]).map((item: any, i: number) => (
+                       ]).map((item: any, i: number) => {
+                          const IconComponent = {
+                            Activity: Activity,
+                            MessageSquare: MessageSquare,
+                            Bot: Bot
+                          }[item.icon as string] || Activity;
+
+                          return (
                         <div key={i} className={`p-3 rounded-xl border flex items-center justify-between ${item.color === 'orange' ? 'border-orange-200 bg-orange-50' : 'bg-slate-50 border-slate-100'}`}>
                           <div className="flex items-center gap-3">
                             <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center ${item.color === 'orange' ? 'bg-orange-200 text-orange-700' : 'bg-green-100 text-green-600'}`}>
-                              <item.icon className="w-4 h-4" />
+                              <IconComponent className="w-4 h-4" />
                             </div>
                             <div className="min-w-0">
                               <div className="text-xs font-bold text-slate-900 truncate">{item.name}</div>
@@ -913,7 +920,8 @@ export default function SuperAdminDashboard() {
                             </div>
                           </div>
                         </div>
-                       ))}
+                          );
+                        })}
                      </div>
                      <button className="w-full mt-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
                        View Detailed Logs
