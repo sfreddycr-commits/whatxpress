@@ -201,6 +201,24 @@ router.post("/providers", requireAdmin, async (req, res) => {
   }
 });
 
+router.put("/providers/:id", requireAdmin, async (req, res) => {
+  try {
+    const db = getDb();
+    const { id } = req.params;
+    const { display_name, api_base_url, api_key } = req.body;
+    if (!display_name || !api_base_url) {
+      return res.status(400).json({ error: "Display name and API Base URL are required" });
+    }
+    await db.run(
+      "UPDATE ai_providers SET display_name = ?, api_base_url = ?, api_key = ? WHERE id = ?",
+      [display_name.trim(), api_base_url.trim(), api_key ? api_key.trim() : null, id]
+    );
+    res.json({ message: "Provider updated successfully" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 router.delete("/providers/:id", requireAdmin, async (req, res) => {
   try {
     const db = getDb();

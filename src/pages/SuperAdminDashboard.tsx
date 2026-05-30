@@ -25,6 +25,7 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
+  Edit3,
   Info,
   CreditCard,
   Megaphone,
@@ -78,6 +79,13 @@ export default function SuperAdminDashboard() {
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState(false);
+  const [isEditProviderOpen, setIsEditProviderOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState({
+    id: "",
+    display_name: "",
+    api_base_url: "",
+    api_key: ""
+  });
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; response?: string; error?: string }>>({});
@@ -279,6 +287,39 @@ export default function SuperAdminDashboard() {
           setActiveProvider(null);
         }
         await fetchProviders();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUpdateProvider = async () => {
+    if (!editingProvider.id || !editingProvider.display_name || !editingProvider.api_base_url) return;
+    try {
+      const res = await fetch(`/api/admin/providers/${editingProvider.id}`, {
+        method: "PUT",
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getToken() && { 'Authorization': `Bearer ${getToken()}` })
+        },
+        body: JSON.stringify(editingProvider)
+      });
+      if (res.ok) {
+        setIsEditProviderOpen(false);
+        // Sync active provider state if we just updated the currently selected provider
+        if (activeProvider && activeProvider.id === editingProvider.id) {
+          setActiveProvider({
+            ...activeProvider,
+            display_name: editingProvider.display_name,
+            api_base_url: editingProvider.api_base_url,
+            api_key: editingProvider.api_key
+          });
+        }
+        setEditingProvider({ id: "", display_name: "", api_base_url: "", api_key: "" });
+        await fetchProviders();
+      } else {
+        const error = await res.json();
+        alert(error.error || "Error updating provider");
       }
     } catch (e) {
       console.error(e);
@@ -1458,6 +1499,26 @@ export default function SuperAdminDashboard() {
                                   />
                                 </button>
 
+                                {/* Edit button for custom providers */}
+                                {p.id !== 'gemini' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingProvider({
+                                        id: p.id,
+                                        display_name: p.display_name,
+                                        api_base_url: p.api_base_url,
+                                        api_key: p.api_key || ""
+                                      });
+                                      setIsEditProviderOpen(true);
+                                    }}
+                                    className="p-1.5 text-slate-300 hover:text-[#109e38] hover:bg-emerald-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                    title="Editar Proveedor"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
                                 {/* Delete button for custom providers */}
                                 {p.id !== 'gemini' && (
                                   <button
@@ -2053,6 +2114,86 @@ export default function SuperAdminDashboard() {
                   className="px-4 py-2 bg-[#109e38] hover:bg-[#0d842e] disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-all"
                 >
                   Registrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Provider Modal */}
+        {isEditProviderOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-[#109e38]" />
+                  <h3 className="font-black text-slate-900 tracking-tight">Editar Proveedor de IA</h3>
+                </div>
+                <button 
+                  onClick={() => setIsEditProviderOpen(false)} 
+                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">ID Único del Proveedor (No editable)</label>
+                  <input 
+                    type="text" 
+                    disabled 
+                    value={editingProvider.id}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm bg-slate-50 text-slate-400 cursor-not-allowed transition-all font-mono uppercase" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Nombre para Mostrar</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={editingProvider.display_name}
+                    onChange={(e) => setEditingProvider({...editingProvider, display_name: e.target.value})}
+                    placeholder="Ej. OpenAI, Groq Cloud, Anthropic" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">API Base URL</label>
+                  <input 
+                    type="url" 
+                    required 
+                    value={editingProvider.api_base_url}
+                    onChange={(e) => setEditingProvider({...editingProvider, api_base_url: e.target.value})}
+                    placeholder="Ej. https://api.openai.com/v1" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">API Key (Modificar para cambiarla)</label>
+                  <input 
+                    type="password" 
+                    value={editingProvider.api_key}
+                    onChange={(e) => setEditingProvider({...editingProvider, api_key: e.target.value})}
+                    placeholder="••••••••••••••••••••••••••••" 
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:border-[#109e38] focus:ring-1 focus:ring-[#109e38] transition-all" 
+                  />
+                </div>
+              </div>
+              <div className="p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditProviderOpen(false)} 
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  disabled={!editingProvider.display_name || !editingProvider.api_base_url}
+                  onClick={handleUpdateProvider} 
+                  className="px-4 py-2 bg-[#109e38] hover:bg-[#0d842e] disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-all"
+                >
+                  Guardar Cambios
                 </button>
               </div>
             </div>
