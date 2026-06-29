@@ -242,7 +242,7 @@ export async function initDb() {
         smtp_user TEXT,
         smtp_pass TEXT,
         logo_url TEXT,
-        currency_symbol TEXT DEFAULT '$',
+        currency_symbol VARCHAR(64) DEFAULT '$',
         opening_time TEXT,
         closing_time TEXT,
         facebook_url TEXT,
@@ -298,8 +298,8 @@ export async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         waiter_id TEXT,
         payment_method TEXT,
-        payment_status TEXT DEFAULT 'pending',
-        order_type TEXT DEFAULT 'dine_in',
+        payment_status VARCHAR(64) DEFAULT 'pending',
+        order_type VARCHAR(64) DEFAULT 'dine_in',
         customer_name TEXT,
         tip REAL DEFAULT 0,
         paid_at TIMESTAMP,
@@ -361,7 +361,7 @@ export async function initDb() {
 
       CREATE TABLE IF NOT EXISTS api_pool (
         key_value VARCHAR(255) PRIMARY KEY,
-        status TEXT DEFAULT 'healthy',
+        status VARCHAR(64) DEFAULT 'healthy',
         fail_count INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -399,14 +399,14 @@ export async function initDb() {
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         phone TEXT,
-        role TEXT DEFAULT 'admin',
+        role VARCHAR(64) DEFAULT 'admin',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS user_tenants (
         user_id VARCHAR(64) NOT NULL,
         tenant_id VARCHAR(64) NOT NULL,
-        role TEXT DEFAULT 'owner',
+        role VARCHAR(64) DEFAULT 'owner',
         PRIMARY KEY (user_id, tenant_id),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -427,7 +427,7 @@ export async function initDb() {
         id VARCHAR(64) PRIMARY KEY,
         tenant_id VARCHAR(64) NOT NULL,
         plan_id VARCHAR(64) NOT NULL,
-        status TEXT DEFAULT 'active',
+        status VARCHAR(64) DEFAULT 'active',
         current_period_start TEXT,
         current_period_end TEXT,
         cancel_at_period_end INT DEFAULT 0,
@@ -441,8 +441,8 @@ export async function initDb() {
         tenant_id VARCHAR(64) NOT NULL,
         subscription_id VARCHAR(64),
         amount REAL NOT NULL,
-        currency TEXT DEFAULT 'USD',
-        status TEXT DEFAULT 'pending',
+        currency VARCHAR(64) DEFAULT 'USD',
+        status VARCHAR(64) DEFAULT 'pending',
         paypal_invoice_id TEXT,
         paypal_capture_id TEXT,
         due_date TEXT,
@@ -455,10 +455,10 @@ export async function initDb() {
         id VARCHAR(64) PRIMARY KEY,
         tenant_id VARCHAR(64) NOT NULL,
         invoice_id VARCHAR(64),
-        gateway TEXT DEFAULT 'paypal',
+        gateway VARCHAR(64) DEFAULT 'paypal',
         type TEXT,
         amount REAL,
-        currency TEXT DEFAULT 'USD',
+        currency VARCHAR(64) DEFAULT 'USD',
         status TEXT,
         paypal_order_id TEXT,
         paypal_capture_id TEXT,
@@ -489,7 +489,7 @@ export async function initDb() {
         table_number TEXT NOT NULL,
         capacity INT,
         qr_code_url TEXT,
-        status TEXT DEFAULT 'Available',
+        status VARCHAR(64) DEFAULT 'Available',
         FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
 
@@ -523,7 +523,7 @@ export async function initDb() {
         tenant_id VARCHAR(64),
         item_name TEXT NOT NULL,
         quantity INT NOT NULL,
-        status TEXT DEFAULT 'Pending',
+        status VARCHAR(64) DEFAULT 'Pending',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
@@ -533,8 +533,8 @@ export async function initDb() {
         tenant_id VARCHAR(64) NOT NULL,
         name TEXT NOT NULL,
         tax_rate REAL NOT NULL,
-        type TEXT DEFAULT 'Percentage',
-        status TEXT DEFAULT 'Active',
+        type VARCHAR(64) DEFAULT 'Percentage',
+        status VARCHAR(64) DEFAULT 'Active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
@@ -545,13 +545,13 @@ export async function initDb() {
         name TEXT NOT NULL,
         code VARCHAR(64) UNIQUE NOT NULL,
         discount REAL NOT NULL,
-        discount_type TEXT DEFAULT 'Percentage',
+        discount_type VARCHAR(64) DEFAULT 'Percentage',
         start_date TEXT NOT NULL,
         end_date TEXT NOT NULL,
         minimum_order REAL DEFAULT 0,
         maximum_discount REAL,
         limit_per_user INT DEFAULT 1,
-        status TEXT DEFAULT 'Active',
+        status VARCHAR(64) DEFAULT 'Active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
@@ -561,7 +561,7 @@ export async function initDb() {
         tenant_id VARCHAR(64) NOT NULL,
         name TEXT NOT NULL,
         pin TEXT NOT NULL,
-        status TEXT DEFAULT 'Active',
+        status VARCHAR(64) DEFAULT 'Active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
@@ -573,7 +573,7 @@ export async function initDb() {
         min_distance REAL NOT NULL,
         max_distance REAL NOT NULL,
         delivery_fee REAL NOT NULL,
-        status TEXT DEFAULT 'Active',
+        status VARCHAR(64) DEFAULT 'Active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
@@ -602,7 +602,7 @@ export async function initDb() {
         name TEXT NOT NULL,
         phone TEXT,
         pin TEXT,
-        status TEXT DEFAULT 'active',
+        status VARCHAR(64) DEFAULT 'active',
         is_available INT DEFAULT 1,
         current_lat REAL,
         current_lng REAL,
@@ -616,7 +616,7 @@ export async function initDb() {
         tenant_id VARCHAR(64) NOT NULL,
         order_id VARCHAR(64) NOT NULL,
         driver_id VARCHAR(64),
-        status TEXT DEFAULT 'pending',
+        status VARCHAR(64) DEFAULT 'pending',
         customer_lat REAL,
         customer_lng REAL,
         customer_phone TEXT,
@@ -661,7 +661,7 @@ export async function initDb() {
         tenant_id VARCHAR(64) NOT NULL,
         amount REAL NOT NULL,
         payment_method TEXT NOT NULL,
-        payment_status TEXT DEFAULT 'pending',
+        payment_status VARCHAR(64) DEFAULT 'pending',
         tip REAL DEFAULT 0,
         paid_at TIMESTAMP,
         refunded_at TIMESTAMP,
@@ -710,7 +710,7 @@ export async function initDb() {
           api_base_url TEXT NOT NULL,
           api_key TEXT,
           is_active INT DEFAULT 0,
-          status TEXT DEFAULT 'healthy',
+          status VARCHAR(64) DEFAULT 'healthy',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS ai_models (
@@ -744,8 +744,8 @@ export async function initDb() {
       await db.exec(`ALTER TABLE pos_orders ADD COLUMN waiter_id TEXT;`);
     } catch (e) {}
     try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN payment_method TEXT;`); } catch (e) {}
-    try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN payment_status TEXT DEFAULT 'pending';`); } catch (e) {}
-    try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN order_type TEXT DEFAULT 'dine_in';`); } catch (e) {}
+    try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN payment_status VARCHAR(64) DEFAULT 'pending';`); } catch (e) {}
+    try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN order_type VARCHAR(64) DEFAULT 'dine_in';`); } catch (e) {}
     try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN customer_name TEXT;`); } catch (e) {}
     try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN tip REAL DEFAULT 0;`); } catch (e) {}
     try { await db.exec(`ALTER TABLE pos_orders ADD COLUMN paid_at TIMESTAMP;`); } catch (e) {}
@@ -790,7 +790,7 @@ export async function initDb() {
     try {
       await db.exec(`ALTER TABLE tenant_settings ADD COLUMN delivery_max_distance REAL DEFAULT 0;`);
     } catch (e) {}
-    try { await db.exec(`ALTER TABLE tenant_settings ADD COLUMN currency_symbol TEXT DEFAULT '$';`); } catch (e) {}
+    try { await db.exec(`ALTER TABLE tenant_settings ADD COLUMN currency_symbol VARCHAR(64) DEFAULT '$';`); } catch (e) {}
 
 
     try {
