@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { generateAIContent } from './aiService.js';
 import { logger } from '../lib/logger.js';
+import { absoluteUrl } from '../lib/urls.js';
 import { initDb } from '../db';
 
 // Store ongoing connections. Exposed globally for the notification service.
@@ -470,7 +471,7 @@ If no order is confirmed yet, set order_detected to false and items to empty lis
                     if (primaryImage && (primaryImage.startsWith('http') || primaryImage.startsWith('/uploads'))) {
                       try {
                         // Resolve absolute URL if relative
-                        const imageUrl = primaryImage.startsWith('http') ? primaryImage : `https://app.whatxpress.com${primaryImage}`;
+                        const imageUrl = primaryImage.startsWith('http') ? primaryImage : absoluteUrl(primaryImage);
                         await sock.sendMessage(customerPhone, {
                           image: { url: imageUrl },
                           caption: `${item.name} — $${item.price}`

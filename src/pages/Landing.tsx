@@ -61,7 +61,7 @@ export default function Landing() {
     try {
       const res = await fetch('/api/public/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, ...regForm }) });
       const data = await res.json();
-      if (data.success) { localStorage.setItem("tenantId", data.tenantId); localStorage.setItem("role", "tenant"); window.location.href = 'https://app.whatxpress.com/dashboard'; }
+      if (data.success) { localStorage.setItem("tenantId", data.tenantId); localStorage.setItem("role", "tenant"); window.location.href = '/dashboard'; }
       else { alert(tr.modal.errorReg + ": " + (data.error || "Desconocido")); }
     } catch (err) { console.error(err); alert(tr.modal.errorReg); }
     finally { setIsRegistering(false); }
@@ -93,7 +93,7 @@ export default function Landing() {
               <button onClick={() => handleSetLang('es')} className={"px-2.5 py-1.5 rounded-full text-xs font-bold transition-all " + (lang === 'es' ? 'bg-white shadow-sm' : 'text-slate-400 hover:text-slate-600')}>ES</button>
               <button onClick={() => handleSetLang('en')} className={"px-2.5 py-1.5 rounded-full text-xs font-bold transition-all " + (lang === 'en' ? 'bg-white shadow-sm' : 'text-slate-400 hover:text-slate-600')}>EN</button>
             </div>
-            <a href="https://app.whatxpress.com/login" className="text-sm font-bold text-slate-600 hover:text-slate-900 hidden sm:block">{tr.nav.login}</a>
+            <a href="/login" className="text-sm font-bold text-slate-600 hover:text-slate-900 hidden sm:block">{tr.nav.login}</a>
             <button onClick={() => setShowRegisterModal(true)} className="h-10 px-5 bg-[#109e38] hover:bg-[#0d842e] text-white rounded-xl font-bold text-sm transition-colors shadow-sm">{tr.nav.start}</button>
             <button className="lg:hidden p-2 text-slate-600" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <CloseIcon size={20} /> : <Menu size={20} />}</button>
           </div>
@@ -105,7 +105,7 @@ export default function Landing() {
                 <a href="#features" onClick={() => setIsMenuOpen(false)} className="py-2">{tr.nav.features}</a>
                 <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="py-2">{tr.nav.how}</a>
                 <a href="/pricing" onClick={() => setIsMenuOpen(false)} className="py-2 text-[#109e38]">{tr.nav.pricing}</a>
-                <a href="https://app.whatxpress.com/login" onClick={() => setIsMenuOpen(false)} className="py-2 text-[#109e38] font-bold">Iniciar sesión</a>
+                <a href="/login" onClick={() => setIsMenuOpen(false)} className="py-2 text-[#109e38] font-bold">Iniciar sesión</a>
                 <div className="flex gap-2 pt-2"><button onClick={() => { handleSetLang('es'); setIsMenuOpen(false); }} className={"px-3 py-1 rounded-lg text-xs font-bold " + (lang==='es'?'bg-slate-100':'')}>ES</button><button onClick={() => { handleSetLang('en'); setIsMenuOpen(false); }} className={"px-3 py-1 rounded-lg text-xs font-bold " + (lang==='en'?'bg-slate-100':'')}>EN</button></div>
               </div>
             </motion.div>
@@ -281,7 +281,7 @@ export default function Landing() {
             <div className="flex items-center gap-2"><UtensilsCrossed size={18} className="text-[#109e38]" /><span className="font-bold text-white">What<span className="text-[#109e38]">xpress</span></span></div>
             <div className="flex items-center gap-6 text-sm">
               <Link to="/pricing" className="hover:text-white transition-colors">{tr.footer.pricing}</Link>
-              <a href="https://app.whatxpress.com/login" className="hover:text-white transition-colors">{tr.footer.login}</a>
+              <a href="/login" className="hover:text-white transition-colors">{tr.footer.login}</a>
               <a href="mailto:hola@whatxpress.com" className="hover:text-white transition-colors">{tr.footer.contact}</a>
             </div>
             <p className="text-xs">&copy; 2026 {tr.footer.copy}</p>

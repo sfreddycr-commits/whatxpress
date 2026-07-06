@@ -56,7 +56,6 @@ async function startServer() {
   app.use(cors({
     origin: [
       "https://whatxpress.com",
-      "https://app.whatxpress.com",
       "http://localhost:3000",
       "http://localhost:5173",
     ],
