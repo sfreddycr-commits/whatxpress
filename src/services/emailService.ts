@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "../lib/logger.js";
+import { absoluteUrl } from "../lib/urls.js";
 
 let defaultTransporter: nodemailer.Transporter | null = null;
 
@@ -75,7 +76,7 @@ export async function sendWelcomeEmail(
         <h1 style="font-size:22px;font-weight:800;color:#0f172a;margin:0 0 8px">¡Bienvenido, ${tenantName}!</h1>
         <p style="font-size:14px;color:#475569;line-height:1.6;margin:0 0 20px">Tu restaurante ya está configurado con el plan <strong>${planName}</strong>. Comienza a recibir pedidos por WhatsApp, gestionar tu menú y hacer crecer tu negocio.</p>
         <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-          <a href="https://app.whatxpress.com" style="display:inline-block;padding:12px 32px;background:#109e38;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">Ir al Dashboard</a>
+          <a href="${absoluteUrl('/login')}" style="display:inline-block;padding:12px 32px;background:#109e38;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">Ir al Dashboard</a>
         </td></tr></table>
         <p style="font-size:12px;color:#94a3b8;margin:20px 0 0">¿Preguntas? Responde este correo o escríbenos por WhatsApp.</p>
       `),
@@ -143,7 +144,7 @@ export async function sendTrialEndingEmail(
         <div style="display:inline-block;padding:6px 16px;background:${urgency}15;color:${urgency};border-radius:20px;font-size:13px;font-weight:700;margin:12px 0">Quedan ${daysLeft} día${daysLeft > 1 ? "s" : ""}</div>
         <p style="font-size:14px;color:#475569;line-height:1.6;margin:16px 0">${tenantName}, no pierdas el acceso a pedidos por WhatsApp, menú digital y todas las herramientas que hacen crecer tu restaurante.</p>
         <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-          <a href="https://app.whatxpress.com" style="display:inline-block;padding:12px 32px;background:#109e38;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">Actualizar a Pro — $99/mes</a>
+          <a href="${absoluteUrl('/login')}" style="display:inline-block;padding:12px 32px;background:#109e38;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">Actualizar a Pro — $99/mes</a>
         </td></tr></table>
         <p style="font-size:12px;color:#94a3b8;margin:16px 0 0">Si ya realizaste el pago, ignora este mensaje.</p>
       `),
@@ -201,7 +202,7 @@ export async function sendPaymentFailedEmail(
         <div style="display:inline-block;padding:6px 16px;background:#fef2f2;color:#ef4444;border-radius:20px;font-size:13px;font-weight:700;margin:12px 0">${currency} ${amount.toFixed(2)} — Fallido</div>
         <p style="font-size:14px;color:#475569;line-height:1.6;margin:16px 0">${tenantName}, el cobro automático de tu plan no pudo completarse. Por favor actualiza tu método de pago para evitar la suspensión del servicio.</p>
         <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-          <a href="https://app.whatxpress.com" style="display:inline-block;padding:12px 32px;background:#ef4444;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">Actualizar Método de Pago</a>
+          <a href="${absoluteUrl('/login')}" style="display:inline-block;padding:12px 32px;background:#ef4444;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">Actualizar Método de Pago</a>
         </td></tr></table>
         <p style="font-size:12px;color:#94a3b8;margin:16px 0 0">Reintentaremos automáticamente en los próximos días. Si necesitas ayuda, responde este correo.</p>
       `),
