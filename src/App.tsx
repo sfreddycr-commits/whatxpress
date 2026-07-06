@@ -4,8 +4,7 @@
  */
 
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -25,35 +24,13 @@ const PageLoader = () => (
   </div>
 );
 
-const isAppDomain = () => window.location.hostname === "app.whatxpress.com";
-const isMarketingDomain = () => {
-  const h = window.location.hostname;
-  return h === "whatxpress.com" || h === "www.whatxpress.com";
-};
-
-const appRoutes = ["/login", "/dashboard", "/admin", "/driver"];
-function isAppRoute(path: string) {
-  return appRoutes.includes(path) || path.startsWith("/order/") || path.startsWith("/d/") || path.startsWith("/t/");
-}
-
-function DomainRedirect() {
-  const location = useLocation();
-  useEffect(() => {
-    if (isMarketingDomain() && isAppRoute(location.pathname)) {
-      window.location.href = "https://app.whatxpress.com" + location.pathname + location.search;
-    }
-  }, [location]);
-  return null;
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <NetworkStatus />
-      <DomainRedirect />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/" element={isAppDomain() ? <Navigate to="/login" replace /> : <Landing />} />
+          <Route path="/" element={<Landing />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/dashboard" element={<TenantDashboard />} />
           <Route path="/order/:tenantId" element={<CustomerMenu />} />
