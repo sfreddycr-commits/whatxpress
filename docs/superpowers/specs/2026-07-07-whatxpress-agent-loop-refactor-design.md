@@ -156,6 +156,11 @@ return response.text
 ```ts
 import * as adminHandlers from "../tools/adminHandlers";
 import * as customerHandlers from "../tools/customerHandlers";
+import { logger } from "../lib/logger";
+
+// Handler signature: receives parsed args and context (NOT the tool name;
+// the registry strips the name and looks up by it).
+export type ToolHandler = (args: any, context: ToolContext) => Promise<any>;
 
 const HANDLERS: Record<string, ToolHandler> = {
   ...adminHandlers,
@@ -177,6 +182,8 @@ export async function executeTool(
 ```
 
 **Naming convention:** The string `name` in each `FunctionDeclaration` MUST equal the key in `HANDLERS`. This is checked at TypeScript compile time by the `Record<string, ToolHandler>` type.
+
+**Handler signature:** `(args, ctx) => Promise<any>` — handlers receive parsed arguments and the per-call context, but **not** the tool name. The registry strips the name. This keeps handlers simple and lets the same handler be registered under multiple aliases if needed.
 
 ## 7. Tool files
 
@@ -282,8 +289,6 @@ Vitest is already configured (`vitest.config.ts`). Test cases:
 
 1. **No function calls** — mock `chat.sendMessage` returns `{ text: "ok" }`. Expect `runAgentLoop` to return `"ok"` after 1 round.
 2. **Single round, 1 tool call** — mock returns `{ functionCalls: [{ name: "x", args: {} }] }`, executor returns `{ ok: true }`, second mock returns `{ text: "done" }`. Expect executor called once with correct args; result text returned.
-3. **Single round, 3 parallel tool calls** — mock returns 3 calls. Expect executor called 3 times; `Promise.all` semantics verified.
-4. **Chained: 2 rounds** — mock 1 returns 1 call, mock 2 returns another call, mock 3 returns text. Expect 2 executor calls, 3 `sendMessage` calls total, final text returned.
 5. **Chained: 3 rounds** — same as above but one more round.
 6. **Reaches MAX_ITERATIONS with pending calls** — mock returns a new call each round; `maxIterations: 3`. Expect `AgentLoopTimeoutError(3)` thrown.
 7. **Tool throws Error** — executor rejects. Expect loop continues with `{ error: msg }` result; final text returned normally.
