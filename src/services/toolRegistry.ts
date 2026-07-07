@@ -1,14 +1,15 @@
 // src/services/toolRegistry.ts
 import { logger } from "../lib/logger";
 import * as adminHandlers from "../tools/adminHandlers";
+import * as customerHandlers from "../tools/customerHandlers";
 import type { ToolContext } from "./agentLoop";
 
 export type ToolHandler = (args: any, context: ToolContext) => Promise<any>;
 
 // Populated via side-effect-free spread imports of all tool handler modules.
-// Tasks 4–7 add additional handler modules here (customer tools).
 const HANDLERS: Record<string, ToolHandler> = {
   ...adminHandlers,
+  ...customerHandlers,
 };
 
 export async function executeTool(
