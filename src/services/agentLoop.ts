@@ -43,13 +43,14 @@ export interface AgentLoopOptions {
 
 export async function runAgentLoop(
   chat: AgentLike,
+  initialMessage: any,
   _tools: unknown[],
   executor: ToolExecutor,
   context: ToolContext,
   opts: AgentLoopOptions = {}
 ): Promise<string> {
   const maxIterations = opts.maxIterations ?? MAX_AGENT_ITERATIONS;
-  let response = await chat.sendMessage({});
+  let response = await chat.sendMessage(initialMessage);
   let iterations = 0;
 
   while (iterations < maxIterations) {

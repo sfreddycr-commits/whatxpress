@@ -58,7 +58,7 @@ export async function processSystemAdminChat(message: string): Promise<string> {
   // Cast to any: Gemini's GenerateContentResponse.functionCalls uses optional
   // FunctionCall.name while agentLoop's FunctionCall requires it. The shapes
   // are structurally compatible at runtime.
-  return runAgentLoop(chat as any, adminTools, executeTool, {
+  return runAgentLoop(chat as any, { message }, adminTools, executeTool, {
     tenantId: "system_admin",
   });
 }
@@ -75,7 +75,7 @@ export async function processCustomerWhatsAppChat(tenantId: string, customerPhon
     },
     history,
   });
-  return runAgentLoop(chat as any, customerTools, executeTool, {
+  return runAgentLoop(chat as any, { message }, customerTools, executeTool, {
     tenantId,
     phone: customerPhone,
   });

@@ -45,11 +45,20 @@ describe("runAgentLoop", () => {
   it("returns text immediately when there are no function calls", async () => {
     const chat = makeMockChat([{ text: "hello" }]);
     const { executor, calls } = makeSpyExecutor();
-    const result = await runAgentLoop(chat as any, [], executor, ctx);
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx);
     expect(result).toBe("hello");
     expect(chat.sendMessage).toHaveBeenCalledTimes(1);
     expect(executor).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
+  });
+
+  it("sends the initial message to the chat on the first call", async () => {
+    const chat = makeMockChat([{ text: "ok" }]);
+    const { executor } = makeSpyExecutor();
+    const initialMessage = { message: "user input" };
+    await runAgentLoop(chat as any, initialMessage, [], executor, ctx);
+    expect(chat.sendMessage).toHaveBeenCalledTimes(1);
+    expect(chat.calls[0]).toBe(initialMessage);
   });
 
   it("executes a single tool call and returns final text", async () => {
@@ -58,7 +67,7 @@ describe("runAgentLoop", () => {
       { text: "done" },
     ]);
     const { executor, calls } = makeSpyExecutor({ ping: { y: 2 } });
-    const result = await runAgentLoop(chat as any, [], executor, ctx);
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx);
     expect(result).toBe("done");
     expect(executor).toHaveBeenCalledTimes(1);
     expect(executor).toHaveBeenCalledWith("ping", { x: 1 }, ctx);
@@ -78,7 +87,7 @@ describe("runAgentLoop", () => {
       { text: "all done" },
     ]);
     const { executor } = makeSpyExecutor({ a: 1, b: 2, c: 3 });
-    const result = await runAgentLoop(chat as any, [], executor, ctx);
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx);
     expect(result).toBe("all done");
     expect(executor).toHaveBeenCalledTimes(3);
   });
@@ -90,7 +99,7 @@ describe("runAgentLoop", () => {
       { text: "chained result" },
     ]);
     const { executor } = makeSpyExecutor({ first: { ok: 1 }, second: { ok: 2 } });
-    const result = await runAgentLoop(chat as any, [], executor, ctx);
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx);
     expect(result).toBe("chained result");
     expect(executor).toHaveBeenCalledTimes(2);
     expect(chat.sendMessage).toHaveBeenCalledTimes(3);
@@ -104,7 +113,7 @@ describe("runAgentLoop", () => {
       { text: "after 3" },
     ]);
     const { executor } = makeSpyExecutor();
-    const result = await runAgentLoop(chat as any, [], executor, ctx);
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx);
     expect(result).toBe("after 3");
     expect(executor).toHaveBeenCalledTimes(3);
   });
@@ -118,7 +127,7 @@ describe("runAgentLoop", () => {
     ]);
     const { executor } = makeSpyExecutor();
     await expect(
-      runAgentLoop(chat as any, [], executor, ctx, { maxIterations: 3 })
+      runAgentLoop(chat as any, {}, [], executor, ctx, { maxIterations: 3 })
     ).rejects.toBeInstanceOf(AgentLoopTimeoutError);
     expect(executor).toHaveBeenCalledTimes(3);
   });
@@ -132,7 +141,7 @@ describe("runAgentLoop", () => {
       if (name === "bad") throw new Error("kaboom");
       return { ok: true };
     });
-    const result = await runAgentLoop(chat as any, [], executor, ctx);
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx);
     expect(result).toBe("recovered");
     expect(executor).toHaveBeenCalledTimes(1);
     // The error was sent back to the model as { error: "kaboom" }.
@@ -155,7 +164,7 @@ describe("runAgentLoop", () => {
       tool: name,
       msg: err.message,
     }));
-    const result = await runAgentLoop(chat as any, [], executor, ctx, {
+    const result = await runAgentLoop(chat as any, {}, [], executor, ctx, {
       onToolError,
     });
     expect(result).toBe("ok");
@@ -177,6 +186,7 @@ describe("runAgentLoop", () => {
     ]);
     const result = await runAgentLoop(
       chat as any,
+      {},
       [],
       executeTool,
       ctx
