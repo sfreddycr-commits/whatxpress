@@ -1,5 +1,3 @@
-import { db } from "../db";
-import { logger } from "../lib/logger";
 import { initDb } from "../db";
 import type { ToolContext } from "../services/agentLoop";
 
