@@ -1,12 +1,15 @@
 // src/services/toolRegistry.ts
 import { logger } from "../lib/logger";
+import * as adminHandlers from "../tools/adminHandlers";
 import type { ToolContext } from "./agentLoop";
 
 export type ToolHandler = (args: any, context: ToolContext) => Promise<any>;
 
-// Populated by Tasks 4 & 5 via side-effect-free spread imports.
-// Until those tasks land, HANDLERS is empty and every tool returns "not found".
-const HANDLERS: Record<string, ToolHandler> = {};
+// Populated via side-effect-free spread imports of all tool handler modules.
+// Tasks 4–7 add additional handler modules here (customer tools).
+const HANDLERS: Record<string, ToolHandler> = {
+  ...adminHandlers,
+};
 
 export async function executeTool(
   name: string,
@@ -19,8 +22,4 @@ export async function executeTool(
     return { error: `Tool '${name}' not found` };
   }
   return handler(args, context);
-}
-
-export function registerHandlers(handlers: Record<string, ToolHandler>): void {
-  Object.assign(HANDLERS, handlers);
 }
