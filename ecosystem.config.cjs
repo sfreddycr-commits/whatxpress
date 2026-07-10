@@ -20,7 +20,7 @@ module.exports = {
   apps: [{
     name: "whatxpress",
     script: "dist/server.cjs",
-    cwd: "/opt/projects/whatxpress-src",
+    cwd: "/root/workspace/whatxpress",
     env: {
       NODE_ENV: "production",
       ...envVars

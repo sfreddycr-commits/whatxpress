@@ -12,3 +12,7 @@ coverage/
 local.sqlite
 whatsapp_auth/
 uploads/
+AGENTS.md
+SECURITY-HARDENING-REPORT.md
+test-playwright-mcp.png
+.playwright-mcp/

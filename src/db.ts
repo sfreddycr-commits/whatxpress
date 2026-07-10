@@ -590,7 +590,7 @@ export async function initDb() {
 
       CREATE TABLE IF NOT EXISTS whatsapp_chat_control (
         tenant_id VARCHAR(64),
-        customer_phone TEXT,
+        customer_phone VARCHAR(64),
         is_bot_active INT DEFAULT 1,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY(tenant_id, customer_phone)

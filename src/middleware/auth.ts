@@ -8,7 +8,16 @@ export function getJwtSecret(): string {
   }
   return secret;
 }
-export const JWT_SECRET = process.env.JWT_SECRET || '';
+export const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      "FATAL: JWT_SECRET is not set. Refusing to start without it — " +
+      "an empty secret allows anyone to forge tokens."
+    );
+  }
+  return secret;
+})();
 
 export interface AuthUser {
   id: string;

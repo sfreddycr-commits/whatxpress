@@ -46,6 +46,40 @@ async function startServer() {
   // 3. Activate background self-healing tasks
   startAPIKeyHealthChecker();
 
+  // ─── REQUEST TIMEOUT MIDDLEWARE ───
+  // 30 second global timeout to prevent hanging requests
+  app.use((req, res, next) => {
+    req.setTimeout(30000, () => {
+      logger.warn({ url: req.url, method: req.method }, "Request timeout");
+      res.status(408).json({ error: "Request timeout" });
+    });
+    next();
+  });
+
+  // ─── NOSQL INJECTION SANITIZATION ───
+  // Strip dangerous $ operators from req.body to prevent NoSQL injection
+  app.use((req, res, next) => {
+    if (req.body && typeof req.body === 'object') {
+      const sanitize = (obj: any): any => {
+        if (Array.isArray(obj)) return obj.map(sanitize);
+        if (obj !== null && typeof obj === 'object') {
+          const clean: any = {};
+          for (const key of Object.keys(obj)) {
+            if (key.startsWith('$')) {
+              logger.warn({ key, url: req.url }, "Blocked NoSQL injection attempt");
+              continue;
+            }
+            clean[key] = sanitize(obj[key]);
+          }
+          return clean;
+        }
+        return obj;
+      };
+      req.body = sanitize(req.body);
+    }
+    next();
+  });
+
   // ─── GLOBAL SECURITY SHIELD ───
   app.use(helmet({
     crossOriginEmbedderPolicy: true,
@@ -53,12 +87,22 @@ async function startServer() {
     contentSecurityPolicy: false, // Let nginx handle complex policies
   }));
 
+  // Dynamic CORS based on environment (fallback to localhost only in dev)
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+    : ["http://localhost:3000", "http://localhost:5173"];
+
   app.use(cors({
-    origin: [
-      "https://whatxpress.com",
-      "http://localhost:3000",
-      "http://localhost:5173",
-    ],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        logger.warn({ origin }, "CORS blocked request");
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }));
 
@@ -115,13 +159,30 @@ async function startServer() {
       cb(null, unique + path.extname(file.originalname));
     }
   });
-  const uploader = multer({ storage });
+  const ALLOWED_MIME_TYPES = [
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+    "application/pdf",
+    "video/mp4", "video/webm",
+    "audio/mpeg", "audio/ogg", "audio/wav",
+  ];
+  const uploader = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        logger.warn({ mimetype: file.mimetype }, "Rejected file upload: disallowed MIME type");
+        cb(new Error("File type not allowed"));
+      }
+    },
+  });
   
   // Expose files publicly
   app.use("/uploads", express.static(uploadDir));
   
   // API Route to perform upload
-  app.post("/api/upload", uploader.single("file"), (req, res) => {
+  app.post("/api/upload", authenticateToken, uploader.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file" });
     res.json({ url: `/uploads/${req.file.filename}` });
   });
