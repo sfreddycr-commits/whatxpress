@@ -96,7 +96,11 @@ export async function registrar_pedido_pos(args: any, ctx: ToolContext): Promise
   const orderItems: any[] = [];
 
   for (const prod of args.productos) {
-    const menuItem = menuItems.find((m: any) => m.name.toLowerCase() === prod.nombre.toLowerCase() || m.name.toLowerCase().includes(prod.nombre.toLowerCase()));
+    const normalizedSearch = prod.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const menuItem = menuItems.find((m: any) => {
+      const normalizedMenuName = m.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return normalizedMenuName === normalizedSearch || normalizedMenuName.includes(normalizedSearch) || normalizedSearch.includes(normalizedMenuName);
+    });
     if (menuItem) {
       const qty = Number(prod.cantidad) || 1;
       total += menuItem.price * qty;
