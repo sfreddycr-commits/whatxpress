@@ -110,6 +110,9 @@ export async function generateAIContent(prompt: string, systemInstruction: strin
 
       if (prompt) {
         if (imageBase64) {
+          if (!imageBase64.startsWith("data:image/")) {
+            throw new Error("El formato de imagen no está soportado. Por favor, suba una imagen válida en formato Base64.");
+          }
           const matches = imageBase64.match(/^data:(image\/[a-zA-Z]*);base64,([^\"]*)$/);
           if (matches && matches.length === 3) {
             contents.push({
@@ -125,7 +128,7 @@ export async function generateAIContent(prompt: string, systemInstruction: strin
               ]
             });
           } else {
-            contents.push({ role: 'user', parts: [{ text: prompt }] });
+            throw new Error("Error al decodificar la imagen en Base64.");
           }
         } else {
           contents.push({ role: 'user', parts: [{ text: prompt }] });
