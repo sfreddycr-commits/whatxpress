@@ -80,6 +80,11 @@ export class DBWrapper {
     // 6. Remove AUTOINCREMENT (MySQL uses AUTO_INCREMENT)
     converted = converted.replace(/AUTOINCREMENT/gi, 'AUTO_INCREMENT');
 
+    // 8. Convert BEGIN TRANSACTION to START TRANSACTION for MySQL compatibility
+    if (converted.toUpperCase().trim() === 'BEGIN TRANSACTION') {
+      converted = 'START TRANSACTION';
+    }
+
     // 7. Convert boolean integer checks (MySQL uses TINYINT(1))
     // No changes needed for TEXT/INTEGER types
 
