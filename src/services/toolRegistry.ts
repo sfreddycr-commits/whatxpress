@@ -22,5 +22,13 @@ export async function executeTool(
     logger.warn({ tool: name, context }, "unknown_tool_called");
     return { error: `Tool '${name}' not found` };
   }
-  return handler(args, context);
+  logger.info({ tool: name, args, context }, "[Tool Exec] Executing tool handler");
+  try {
+    const result = await handler(args, context);
+    logger.info({ tool: name, result }, "[Tool Exec] Tool handler result");
+    return result;
+  } catch (err: any) {
+    logger.error({ tool: name, err: err.message || err }, "[Tool Exec] Tool handler threw error");
+    throw err;
+  }
 }
