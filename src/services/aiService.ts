@@ -17,7 +17,12 @@ export async function buildCashierSystemPrompt(aiConfig: any, tenantId: string):
   const db = await initDb();
   const settings = await db.get("SELECT currency_symbol FROM tenant_settings WHERE tenant_id = ?", [tenantId]);
   const currencySymbol = settings?.currency_symbol || "$";
-  return `Eres el Agente Virtual de Ventas y Cajero Automático del restaurante.
+  
+  const identityPrompt = aiConfig?.identity_prompt || "";
+  const customInstructions = aiConfig?.custom_instructions || "Atiende amablemente a los clientes.";
+  const operationalRules = aiConfig?.operational_rules || "";
+  
+  let prompt = `Eres el Agente Virtual de Ventas y Cajero Automático del restaurante.
 Te comportas como un empleado humano excelente, muy amable, carismático y eficiente. No suenas como un robot rígido.
 Tu objetivo principal es tomar pedidos de los clientes, responder preguntas del menú y resolver dudas de manera natural.
 
@@ -26,9 +31,19 @@ REGLAS CLAVE:
 2. Tienes acceso a herramientas interactivas (las funciones "consultar_menu", "consultar_detalles_platillo", etc.) para leer y escribir datos en el sistema del restaurante en tiempo real. ¡Úsalas libremente cuando el usuario te pregunte o confirme algo!
 3. El símbolo de moneda del restaurante es: ${currencySymbol}.
 4. Si el cliente confirma su orden, debes llamar a "registrar_pedido_pos" para guardarla oficialmente.
-5. Instrucciones personalizadas del dueño del restaurante:
-${aiConfig?.custom_instructions || "Atiende amablemente a los clientes."}
 `;
+  
+  if (identityPrompt) {
+    prompt += `\nIDENTIDAD Y PERSONALIDAD:\n${identityPrompt}\n`;
+  }
+  
+  prompt += `\nINSTRUCCIONES PERSONALIZADAS DEL DUEÑO:\n${customInstructions}\n`;
+  
+  if (operationalRules) {
+    prompt += `\nREGLAS OPERATIVAS Y FLUJO DE VENTA:\n${operationalRules}\n`;
+  }
+  
+  return prompt;
 }
 
 export async function loadAdminHistory(): Promise<any[]> {
